@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Slow AR Ninja</title>
+  <title>Safe Height AR Ninja</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,7 +19,7 @@
       user-select: none;
     }
 
-    /* 攝影機與畫布鏡像翻轉，符合直覺 */
+    /* 鏡像翻轉 */
     .input_video, canvas {
       position: absolute;
       inset: 0;
@@ -28,11 +28,10 @@
       object-fit: cover;
       transform: scaleX(-1); 
     }
-    
     .input_video { z-index: 0; }
     canvas { z-index: 1; }
 
-    /* UI 層 */
+    /* UI */
     #ui-layer {
       position: absolute;
       inset: 0;
@@ -42,7 +41,7 @@
       flex-direction: column;
       justify-content: space-between;
       padding: 20px;
-      background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.7) 100%);
+      background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.6) 100%);
     }
 
     .top-bar {
@@ -80,7 +79,7 @@
       border-radius: 24px;
       padding: 15px 50px;
       box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-      transition: transform 0.3s;
+      transition: transform 0.1s;
     }
 
     #target-label { font-size: 14px; color: #ffd700; font-weight: bold; letter-spacing: 2px; }
@@ -91,11 +90,11 @@
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       font-family: 'Fredoka One';
-      font-size: 80px;
+      font-size: 90px;
       text-shadow: 4px 4px 0 rgba(0,0,0,0.8);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.2s;
+      transition: opacity 0.1s;
       z-index: 20;
     }
 
@@ -156,11 +155,11 @@
     </div>
 
     <div id="start-screen" class="modal-screen">
-        <h1 style="font-family:'Fredoka One'; font-size:50px; color:#ffd700;">Slow AR Ninja</h1>
-        <p style="color:#ccc; font-size:18px;">
-            1. 每次只出現兩張<br>
-            2. 卡片會像氣球一樣慢慢飛<br>
-            3. 全部消失後才會出下一題
+        <h1 style="font-family:'Fredoka One'; font-size:50px; color:#ffd700;">Safe Height Ninja</h1>
+        <p style="color:#ccc; font-size:18px; line-height: 1.6;">
+            1. 卡片會慢慢飄<br>
+            2. <b>絕對不會</b>飛出螢幕上面<br>
+            3. 掉落後自動下一題
         </p>
         <button class="btn" onclick="startGame()">開啟鏡頭 & 開始</button>
     </div>
@@ -214,9 +213,9 @@
         { word: 'CAKE', icon: '🎂', color: '#fd79a8' }
     ];
 
-    // --- 物理參數調整區 ---
-    const GRAVITY = 0.06;     // 重力極低，產生漂浮感
-    const THROW_FORCE = 11;   // 上拋力道減弱，配合低重力
+    // --- 物理參數 ---
+    const GRAVITY = 0.07;        // 慢速重力
+    const AIR_RESISTANCE = 0.99; // 空氣阻力
     
     let gameState = {
         isPlaying: false,
@@ -249,16 +248,35 @@
             let laneWidth = window.W / 2;
             let startX = laneWidth * laneIndex + (laneWidth / 2);
 
-            this.x = startX + (Math.random() - 0.5) * 30; 
-            this.y = window.H + 150;
+            this.x = startX + (Math.random() - 0.5) * 50; 
+            this.y = window.H + 150; 
             
-            // 讓卡片稍微往中間飄，但速度很慢
-            let drift = (startX < window.W / 2) ? 0.2 : -0.2;
-            this.vx = drift + (Math.random() - 0.5) * 0.1; 
+            // --- 精準高度計算 (Physics Calculation) ---
             
-            this.vy = -(Math.random() * 2 + THROW_FORCE); 
+            // 1. 設定「天花板」：螢幕高度的 15% 處 (保留頂部空間)
+            // 卡片最高只會飛到這裡，絕對不會超過
+            let safeCeiling = window.H * 0.15;
+            
+            // 2. 設定「隨機高度區間」：讓卡片在 15% ~ 35% 之間的高空隨機停滯
+            // 這樣視覺上比較自然，不會每次都停在同一條線上
+            let randomPeakY = safeCeiling + Math.random() * (window.H * 0.2);
+            
+            // 3. 計算需要上升的距離 (位移)
+            let distanceToTravel = this.y - randomPeakY;
+            
+            // 4. 反推初速度公式：v = sqrt(2 * g * h)
+            // 這保證了初始速度剛好能讓卡片飛到 randomPeakY 就停住(速度歸零)，然後開始下墜
+            let requiredLaunchSpeed = Math.sqrt(2 * GRAVITY * distanceToTravel);
+
+            // 應用速度
+            this.vy = -requiredLaunchSpeed;
+            
+            // X軸：稍微往中間飄
+            let drift = (startX < window.W / 2) ? 0.8 : -0.8; 
+            this.vx = drift + (Math.random() - 0.5) * 0.3;
+            
             this.rotation = Math.random() * Math.PI * 2;
-            this.rotationSpeed = (Math.random() - 0.5) * 0.02; // 旋轉也變慢
+            this.rotationSpeed = (Math.random() - 0.5) * 0.03; 
 
             this.icon = data.icon;
             this.word = data.word;
@@ -267,16 +285,21 @@
         }
 
         update() {
-            this.x += this.vx; this.y += this.vy; this.vy += GRAVITY; this.rotation += this.rotationSpeed;
+            // 1. 應用物理
+            this.x += this.vx;
+            this.y += this.vy;
             
-            // 掉出畫面
-            if (this.y > window.H + 200 && this.active) {
+            this.vy += GRAVITY;       // 重力
+            this.vx *= AIR_RESISTANCE; // 阻力
+            
+            this.rotation += this.rotationSpeed;
+            
+            // 2. 邊界與狀態檢查
+            if (this.y > window.H + 200) {
                 this.active = false;
+                
                 if (this.isTarget && gameState.isPlaying) {
-                    showStatus("MISSED", "#e17055");
-                    gameState.lives--;
-                    updateUI();
-                    if (gameState.lives <= 0) endGame();
+                    handleMiss();
                 }
             }
         }
@@ -309,7 +332,7 @@
     class Particle {
         constructor(x, y, color, isText = false, text = '') {
             this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 10; // 粒子爆發速度也稍微減慢
+            this.vx = (Math.random() - 0.5) * 10;
             this.vy = (Math.random() - 0.5) * 10;
             this.life = 1.0;
             this.color = color;
@@ -318,14 +341,14 @@
             this.scale = 1;
         }
         update() {
-            this.x += this.vx; this.y += this.vy; this.vy += GRAVITY; this.life -= 0.02; // 粒子消失變慢
+            this.x += this.vx; this.y += this.vy; this.vy += 0.1; this.life -= 0.02;
             if(this.isText) this.scale += 0.02;
         }
         draw() {
             ctx.save(); ctx.globalAlpha = Math.max(0, this.life);
             if (this.isText) {
                 ctx.translate(this.x, this.y); ctx.scale(this.scale, this.scale);
-                ctx.font = "900 50px 'Fredoka One'"; ctx.fillStyle = this.color; 
+                ctx.font = "900 60px 'Fredoka One'"; ctx.fillStyle = this.color; 
                 ctx.strokeStyle = "white"; ctx.lineWidth = 4;
                 ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
             } else {
@@ -365,10 +388,9 @@
 
         targetWordEl.innerText = gameState.targetWord;
         targetBoxEl.style.transform = "scale(1.2)";
-        setTimeout(() => targetBoxEl.style.transform = "scale(1)", 300);
+        setTimeout(() => targetBoxEl.style.transform = "scale(1)", 200);
 
-        // 題目顯示 1.5 秒後才發射，給足準備時間
-        setTimeout(() => { if(gameState.isPlaying) spawnCards(targetData); }, 1500);
+        setTimeout(() => { if(gameState.isPlaying) spawnCards(targetData); }, 1200);
     }
 
     function spawnCards(targetData) {
@@ -379,9 +401,26 @@
         let cards = [targetData, wrongData];
         if (Math.random() < 0.5) cards = [wrongData, targetData];
 
-        // 嚴格生成兩張
         gameState.objects.push(new GameObject(cards[0], 0));
         gameState.objects.push(new GameObject(cards[1], 1));
+    }
+
+    function handleMiss() {
+        showStatus("MISSED", "#e17055");
+        gameState.lives--;
+        updateUI();
+        if (gameState.lives <= 0) endGame();
+    }
+
+    function clearRemainingCards() {
+        gameState.objects.forEach(obj => {
+            if (obj.active) {
+                // 讓剩下的卡片往下掉
+                obj.vy = 5; 
+                obj.vx *= 0.5;
+                obj.active = false; // 視覺保留但不可互動
+            }
+        });
     }
 
     function gameLoop() {
@@ -389,10 +428,15 @@
         frameCount++;
 
         if (gameState.isPlaying) {
-            // 核心邏輯：必須所有物件清空 (length === 0) 才會觸發下一波
-            if (gameState.isWaveActive && gameState.objects.length === 0 && !gameState.waitingForNextWave) {
+            
+            // 檢查清場
+            let activeCount = 0;
+            gameState.objects.forEach(o => { 
+                if (o.y < window.H + 200) activeCount++;
+            });
+            
+            if (gameState.isWaveActive && activeCount === 0 && !gameState.waitingForNextWave) {
                 gameState.waitingForNextWave = true;
-                // 清空後等待 1 秒才開始新題目
                 setTimeout(startNewWave, 1000);
             }
 
@@ -402,10 +446,13 @@
                 obj.draw();
 
                 if (!obj.active) {
-                    gameState.objects.splice(i, 1);
+                    if(obj.y > window.H + 200) {
+                        gameState.objects.splice(i, 1);
+                    }
                     continue;
                 }
 
+                // 切割判定
                 let dx = gameState.hand.x - obj.x;
                 let dy = gameState.hand.y - obj.y;
                 let dist = Math.sqrt(dx*dx + dy*dy);
@@ -415,13 +462,20 @@
                         gameState.score += 10;
                         createSliceEffect(obj, true);
                         showStatus("NICE!", "#2ecc71");
-                        gameState.objects.splice(i, 1);
+                        
+                        obj.active = false; 
+                        obj.vy = -5; // 切對了往上飛
+                        
+                        clearRemainingCards();
                         updateUI();
                     } else {
                         showStatus("WRONG", "#d63031");
                         gameState.lives--;
                         createSliceEffect(obj, false);
-                        gameState.objects.splice(i, 1);
+                        
+                        obj.active = false;
+                        obj.vy = 5; // 切錯往下掉
+                        
                         updateUI();
                         if (gameState.lives <= 0) endGame();
                     }
