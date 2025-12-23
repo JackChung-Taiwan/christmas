@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕聽力忍者 - 雙卡回合制</title>
+    <title>聖誕忍者 - 靜音配對版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -22,19 +22,9 @@
             position: relative;
             width: 100vw;
             height: 100vh;
-            background: radial-gradient(circle, #2c0e37 0%, #000000 100%);
+            /* 靜音版改用深藍色系，比較沈穩專注 */
+            background: radial-gradient(circle, #0f2027 0%, #203a43 50%, #2c5364 100%);
             overflow: hidden;
-        }
-
-        .bg-pattern {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            opacity: 0.15;
-            pointer-events: none;
-            background-image: linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff), 
-                              linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff);
-            background-position: 0 0, 10px 10px;
-            background-size: 20px 20px;
         }
 
         canvas {
@@ -46,41 +36,69 @@
 
         .input_video { display: none; }
 
+        /* UI 層 */
         #ui-layer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            padding: 30px;
-            box-sizing: border-box;
-        }
-
-        #top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
+            padding: 20px;
         }
 
         #score-board {
             font-size: 50px;
             color: #fff;
-            text-shadow: 3px 3px 0 #666;
+            text-shadow: 2px 2px 4px #000;
+            margin-bottom: 20px;
         }
 
-        #target-display {
-            font-size: 60px;
-            color: #FFD700;
-            text-align: center;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-            background: rgba(0,0,0,0.6);
-            padding: 10px 30px;
+        /* 題目顯示區 - 這是靜音版的核心 */
+        #target-box {
+            background: rgba(0, 0, 0, 0.7);
+            border: 4px solid #FFD700;
             border-radius: 20px;
-            border: 2px solid #FFD700;
+            padding: 20px 50px;
+            text-align: center;
+            transition: transform 0.2s;
         }
 
-        .lives { color: #ff3333; margin-top: 10px; font-size: 40px;}
+        #target-label {
+            color: #aaa;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        #target-word {
+            color: #FFD700;
+            font-size: 80px;
+            letter-spacing: 3px;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .lives { 
+            position: absolute;
+            top: 30px;
+            right: 40px;
+            font-size: 40px; 
+            color: #ff3333;
+        }
+
+        /* 狀態文字 (Missed / Wrong) */
+        #status-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 100px;
+            font-weight: bold;
+            text-shadow: 4px 4px 0 #000;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            z-index: 5;
+        }
 
         #start-screen, #game-over-screen {
             position: absolute;
@@ -94,66 +112,51 @@
             pointer-events: auto;
         }
 
-        h1 { color: #FFD700; font-size: 70px; margin: 0; text-shadow: 4px 4px 0 #c41e3a; }
-        p { color: #fff; font-size: 28px; margin: 30px 0; max-width: 600px; text-align: center; line-height: 1.5;}
+        h1 { color: #fff; font-size: 60px; margin: 0; }
+        p { color: #ccc; font-size: 24px; margin: 20px 0; text-align: center; }
         
         button {
-            padding: 20px 60px;
-            font-size: 32px;
-            background: #2ecc71;
-            color: white;
+            padding: 15px 50px;
+            font-size: 28px;
+            background: #FFD700;
+            color: #000;
             border: none;
-            border-radius: 60px;
+            border-radius: 50px;
             cursor: pointer;
-            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.6);
-            transition: transform 0.2s;
-        }
-        button:hover { transform: scale(1.1); background: #27ae60; }
-
-        #missed-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 100px;
             font-weight: bold;
-            color: #e67e22;
-            text-shadow: 4px 4px 0 #000;
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            z-index: 5;
         }
+        button:hover { transform: scale(1.05); background: #fff; }
+
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div class="bg-pattern"></div>
     <video class="input_video"></video>
     <canvas class="output_canvas"></canvas>
-    <div id="missed-text">MISSED!</div>
+    
+    <div id="status-text">MISSED!</div>
 
     <div id="ui-layer">
-        <div id="top-bar">
-            <div>
-                <div id="score-board">SCORE: <span id="score">0</span></div>
-                <div class="lives" id="lives">❤️❤️❤️</div>
-            </div>
-            <div id="target-display">👂 Listen...</div>
+        <div id="score-board">SCORE: <span id="score">0</span></div>
+        <div class="lives" id="lives">❤️❤️❤️</div>
+        
+        <div id="target-box">
+            <div id="target-label">TARGET</div>
+            <div id="target-word">Wait...</div>
         </div>
     </div>
 
     <div id="start-screen">
-        <h1>🎧 聖誕聽力忍者</h1>
-        <p>1. 題目唸完才會出現卡片<br>2. 每次只出現兩張 (一左一右)<br>3. 切完或掉落後才會出下一題</p>
-        <button onclick="startGame()">START GAME</button>
+        <h1>🤫 靜音配對忍者</h1>
+        <p>看上方的題目單字<br>切開對應的圖片<br>(完全無聲音)</p>
+        <button onclick="startGame()">START</button>
     </div>
 
     <div id="game-over-screen" style="display: none;">
         <h1>GAME OVER</h1>
-        <p>Final Score: <span id="final-score">0</span></p>
-        <button onclick="resetGame()">PLAY AGAIN</button>
+        <p>Score: <span id="final-score">0</span></p>
+        <button onclick="resetGame()">REPLAY</button>
     </div>
 </div>
 
@@ -163,10 +166,11 @@
     const videoElement = document.querySelector('.input_video');
     const scoreEl = document.getElementById('score');
     const livesEl = document.getElementById('lives');
-    const targetDisplayEl = document.getElementById('target-display');
+    const targetWordEl = document.getElementById('target-word');
+    const targetBoxEl = document.getElementById('target-box');
     const startScreen = document.getElementById('start-screen');
     const gameOverScreen = document.getElementById('game-over-screen');
-    const missedTextEl = document.getElementById('missed-text');
+    const statusTextEl = document.getElementById('status-text');
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -175,77 +179,22 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // --- 音效系統 ---
-    let audioCtx = null;
-    function initAudio() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-    }
-
-    // 1. 切對：切擊聲
-    function playSliceSound() {
-        if (!audioCtx) return;
-        const t = audioCtx.currentTime;
-        const bufferSize = audioCtx.sampleRate * 0.1;
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-        const noise = audioCtx.createBufferSource();
-        noise.buffer = buffer;
-        const noiseGain = audioCtx.createGain();
-        noiseGain.gain.setValueAtTime(0.5, t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-        noise.connect(noiseGain);
-        noiseGain.connect(audioCtx.destination);
-        noise.start();
-        
-        const osc = audioCtx.createOscillator();
-        osc.frequency.setValueAtTime(800, t);
-        osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
-        const oscGain = audioCtx.createGain();
-        oscGain.gain.setValueAtTime(0.3, t);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-        osc.connect(oscGain);
-        oscGain.connect(audioCtx.destination);
-        osc.start();
-    }
-
-    // 2. 切錯：敲桌聲
-    function playTableSound() {
-        if (!audioCtx) return;
-        const t = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(150, t);
-        osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
-        const gain = audioCtx.createGain();
-        gain.gain.setValueAtTime(1.0, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
-        const filter = audioCtx.createBiquadFilter();
-        filter.type = "lowpass";
-        filter.frequency.value = 300;
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-    }
-
     // --- 資料庫 ---
     const VOCAB_DB = [
-        { word: 'Santa', icon: '🎅', color: '#ffcccc' },
-        { word: 'Tree', icon: '🎄', color: '#ccffcc' },
-        { word: 'Gift', icon: '🎁', color: '#ffffcc' },
-        { word: 'Star', icon: '⭐', color: '#ffffaa' },
-        { word: 'Snow', icon: '❄️', color: '#eefaff' },
-        { word: 'Bell', icon: '🔔', color: '#ffebcd' },
-        { word: 'Sock', icon: '🧦', color: '#ffe6e6' },
-        { word: 'Deer', icon: '🦌', color: '#ebd6ad' },
-        { word: 'Elf', icon: '🧝', color: '#d0f0c0' },
-        { word: 'Cake', icon: '🎂', color: '#ffccf2' }
+        { word: 'SANTA', icon: '🎅', color: '#ffcccc' },
+        { word: 'TREE', icon: '🎄', color: '#ccffcc' },
+        { word: 'GIFT', icon: '🎁', color: '#ffffcc' },
+        { word: 'STAR', icon: '⭐', color: '#ffffaa' },
+        { word: 'SNOW', icon: '❄️', color: '#eefaff' },
+        { word: 'BELL', icon: '🔔', color: '#ffebcd' },
+        { word: 'SOCK', icon: '🧦', color: '#ffe6e6' },
+        { word: 'DEER', icon: '🦌', color: '#ebd6ad' },
+        { word: 'ELF', icon: '🧝', color: '#d0f0c0' },
+        { word: 'CAKE', icon: '🎂', color: '#ffccf2' }
     ];
 
-    const GRAVITY = 0.15; // 稍微快一點點，因為只有兩張
-    const THROW_FORCE = 14;
+    const GRAVITY = 0.12; 
+    const THROW_FORCE = 13;
     
     let gameState = {
         isPlaying: false,
@@ -256,49 +205,36 @@
         particles: [],
         slices: [],
         hand: { x: -100, y: -100, prevX: -100, prevY: -100, speed: 0 },
-        isWaveActive: false, // 是否正在進行一波攻擊
-        waitingForNextWave: false // 是否正在等待下一波
+        isWaveActive: false,
+        waitingForNextWave: false
     };
 
     let frameCount = 0;
 
-    function speak(text) {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            utterance.rate = 0.9;
-            window.speechSynthesis.speak(utterance);
-        }
-    }
-
+    // --- 遊戲物件 ---
     class GameObject {
         constructor(data, laneIndex) {
             this.active = true;
             this.radius = 110;
             
-            // --- 雙軌道位置邏輯 ---
-            // laneIndex: 0 (左), 1 (右)
+            // 嚴格的左右分道 (0:左, 1:右)
             let laneWidth = canvas.width / 2;
             let startX = laneWidth * laneIndex + (laneWidth / 2);
 
-            // 稍微隨機一點點
-            let randomOffset = (Math.random() - 0.5) * (laneWidth * 0.3);
-            this.x = startX + randomOffset;
+            // 輕微隨機偏移
+            this.x = startX + (Math.random() - 0.5) * 50; 
             this.y = canvas.height + 150;
 
-            // 往中心稍微修正的速度
-            let drift = 0;
-            if (startX < canvas.width / 2) drift = 0.5; // 左邊往右一點
-            else drift = -0.5; // 右邊往左一點
+            // 輕微向中心偏移
+            let drift = (startX < canvas.width / 2) ? 0.3 : -0.3;
             
-            this.vx = drift + (Math.random() - 0.5) * 0.5; 
-            this.vy = -(Math.random() * 2 + THROW_FORCE); // 高度隨機
+            this.vx = drift + (Math.random() - 0.5) * 0.2; 
+            this.vy = -(Math.random() * 2 + THROW_FORCE); 
             this.rotation = Math.random() * Math.PI * 2;
             this.rotationSpeed = (Math.random() - 0.5) * 0.05;
 
             this.icon = data.icon;
-            this.word = data.word;
+            this.word = data.word; // 卡片上也顯示單字，方便對照
             this.color = data.color;
             this.isTarget = (this.word === gameState.targetWord);
         }
@@ -309,10 +245,14 @@
             this.vy += GRAVITY;
             this.rotation += this.rotationSpeed;
             
+            // 掉出畫面
             if (this.y > canvas.height + 200 && this.active) {
                 this.active = false;
                 if (this.isTarget && gameState.isPlaying) {
-                    triggerMissed();
+                    showStatus("MISSED", "#e67e22");
+                    gameState.lives--;
+                    updateUI();
+                    if (gameState.lives <= 0) endGame();
                 }
             }
         }
@@ -323,18 +263,26 @@
             ctx.rotate(this.rotation);
             const w = 220; const h = 280;
             
+            // 陰影
             ctx.shadowColor = "rgba(0,0,0,0.5)";
             ctx.shadowBlur = 15;
+            
+            // 卡片底
             ctx.fillStyle = "#fff";
             ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 15); ctx.fill();
+            
+            // 顏色框
             ctx.fillStyle = this.color;
             ctx.fillRect(-w/2 + 15, -h/2 + 15, w - 30, w - 30);
+            
             ctx.shadowBlur = 0;
             
+            // 圖片
             ctx.font = "120px Arial";
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(this.icon, 0, -20);
             
+            // 文字 (輔助視覺配對)
             ctx.fillStyle = "#000";
             ctx.font = "bold 40px Arial";
             ctx.fillText(this.word, 0, 90);
@@ -373,8 +321,9 @@
         }
     }
 
+    // --- 遊戲邏輯 ---
+
     function initGame() {
-        initAudio();
         startScreen.style.display = "none";
         gameOverScreen.style.display = "none";
         gameState.score = 0;
@@ -386,45 +335,18 @@
         gameState.waitingForNextWave = false;
         updateUI();
         
-        // 開始第一波
         startNewWave();
     }
 
-    function triggerWrongFeedback() {
-        gameState.lives--;
-        gameState.score -= 5;
-        if(gameState.score < 0) gameState.score = 0;
-        updateUI();
-        playTableSound();
-        if (gameState.lives <= 0) endGame();
-    }
-
-    function triggerMissed() {
-        gameState.lives--;
-        gameState.score -= 5; 
-        if(gameState.score < 0) gameState.score = 0;
-        updateUI();
-        missedTextEl.style.opacity = 1;
+    function showStatus(text, color) {
+        statusTextEl.innerText = text;
+        statusTextEl.style.color = color;
+        statusTextEl.style.opacity = 1;
         setTimeout(() => {
-            missedTextEl.style.opacity = 0;
+            statusTextEl.style.opacity = 0;
         }, 800);
-        if (gameState.lives <= 0) endGame();
     }
 
-    function endGame() {
-        gameState.isPlaying = false;
-        document.getElementById('final-score').innerText = gameState.score;
-        gameOverScreen.style.display = "flex";
-    }
-
-    function updateUI() {
-        scoreEl.innerText = gameState.score;
-        let livesStr = "";
-        for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
-        livesEl.innerHTML = livesStr;
-    }
-
-    // --- 新的回合制邏輯 ---
     function startNewWave() {
         if (!gameState.isPlaying) return;
         
@@ -435,36 +357,32 @@
         const targetData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
         gameState.targetWord = targetData.word;
 
-        // 2. 播放語音
-        targetDisplayEl.innerText = "👂 Listen...";
-        speak(gameState.targetWord);
-        
-        // 1.5秒後顯示文字提示並發射卡片
+        // 2. 更新上方 UI
+        targetWordEl.innerText = gameState.targetWord;
+        targetBoxEl.style.transform = "scale(1.2)"; // 放大提示
+        setTimeout(() => targetBoxEl.style.transform = "scale(1)", 300);
+
+        // 3. 延遲後發射 (給玩家看題目的時間)
         setTimeout(() => {
             if(!gameState.isPlaying) return;
-            targetDisplayEl.innerText = "Target: " + gameState.targetWord;
             spawnCards(targetData);
-        }, 1500);
+        }, 1200);
     }
 
     function spawnCards(targetData) {
-        // 準備兩張卡片：一張對的，一張錯的
+        // 準備兩張卡
         let wrongData;
         do {
             wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
         } while (wrongData.word === gameState.targetWord);
 
         let cards = [targetData, wrongData];
-        // 隨機交換位置 (誰在左誰在右)
-        if (Math.random() < 0.5) {
-            cards = [wrongData, targetData];
-        }
+        // 隨機交換左右
+        if (Math.random() < 0.5) cards = [wrongData, targetData];
 
-        // 發射！
-        // i=0 是左軌道, i=1 是右軌道
-        for (let i = 0; i < 2; i++) {
-            gameState.objects.push(new GameObject(cards[i], i));
-        }
+        // 左邊一張 (Lane 0), 右邊一張 (Lane 1)
+        gameState.objects.push(new GameObject(cards[0], 0));
+        gameState.objects.push(new GameObject(cards[1], 1));
     }
 
     function gameLoop() {
@@ -473,20 +391,15 @@
 
         if (gameState.isPlaying) {
             
-            // --- 檢查是否該結束這一波 ---
-            // 條件：正在進行波次 且 畫面上的物件已清空
+            // 檢查波次結束
             if (gameState.isWaveActive && gameState.objects.length === 0) {
-                // 如果還沒有在等待下一波，就啟動等待程序
                 if (!gameState.waitingForNextWave) {
                     gameState.waitingForNextWave = true;
-                    // 等 1 秒後開始下一波 (稍微喘口氣)
-                    setTimeout(() => {
-                        startNewWave();
-                    }, 1000);
+                    // 空檔 1 秒後下一題
+                    setTimeout(startNewWave, 1000);
                 }
             }
 
-            // 更新物件
             for (let i = gameState.objects.length - 1; i >= 0; i--) {
                 let obj = gameState.objects[i];
                 obj.update();
@@ -497,6 +410,7 @@
                     continue;
                 }
 
+                // 切割判定
                 let dx = gameState.hand.x - obj.x;
                 let dy = gameState.hand.y - obj.y;
                 let dist = Math.sqrt(dx*dx + dy*dy);
@@ -504,19 +418,22 @@
                 if (dist < obj.radius && gameState.hand.speed > 3) {
                     if (obj.word === gameState.targetWord) {
                         gameState.score += 10;
-                        playSliceSound(); 
                         createSliceEffect(obj, true);
                         gameState.objects.splice(i, 1);
                         updateUI();
                     } else {
-                        triggerWrongFeedback(); 
+                        showStatus("WRONG", "#ff3333");
+                        gameState.lives--;
                         createSliceEffect(obj, false);
                         gameState.objects.splice(i, 1);
+                        updateUI();
+                        if (gameState.lives <= 0) endGame();
                     }
                 }
             }
         }
 
+        // 粒子
         for (let i = gameState.particles.length - 1; i >= 0; i--) {
             let p = gameState.particles[i];
             p.update();
@@ -529,8 +446,8 @@
     }
 
     function createSliceEffect(obj, isCorrect) {
-        let color = isCorrect ? "#2ecc71" : "#e74c3c";
-        let msg = isCorrect ? "YES!" : "WRONG!";
+        let color = isCorrect ? "#2ecc71" : "#ff3333";
+        let msg = isCorrect ? "YES!" : "NO!";
         for (let i = 0; i < 15; i++) gameState.particles.push(new Particle(obj.x, obj.y, color));
         gameState.particles.push(new Particle(obj.x, obj.y, color, true, msg));
     }
@@ -554,6 +471,23 @@
         if (gameState.slices.length > 10) gameState.slices.shift();
     }
 
+    function updateUI() {
+        scoreEl.innerText = gameState.score;
+        let livesStr = "";
+        for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
+        livesEl.innerHTML = livesStr;
+    }
+
+    function endGame() {
+        gameState.isPlaying = false;
+        document.getElementById('final-score').innerText = gameState.score;
+        gameOverScreen.style.display = "flex";
+    }
+
+    window.startGame = initGame;
+    window.resetGame = initGame;
+
+    // MediaPipe Setup
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
     hands.onResults((results) => {
@@ -582,12 +516,6 @@
     });
     
     camera.start();
-    // 不要自動開始，等按鈕
-    // window.startGame = initGame; 
-    
-    // 初始化 UI 狀態
-    window.startGame = initGame;
-    window.resetGame = initGame;
 
 </script>
 </body>
