@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕單字體感閃卡</title>
+    <title>聖誕單字忍者 - Flashcard Ninja</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -12,28 +12,28 @@
         body {
             margin: 0;
             padding: 0;
-            background: radial-gradient(ellipse at center, #1a472a 0%, #0d2b1a 100%); /* 聖誕綠背景 */
-            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            font-family: 'Arial Black', sans-serif;
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: white;
+            user-select: none;
         }
 
         #game-container {
             position: relative;
-            width: 1280px;
-            height: 720px;
-            box-shadow: 0 0 30px rgba(255,0,0,0.3);
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 20px;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, #2b3e50 0%, #000000 100%);
             overflow: hidden;
-            border: 5px solid #c41e3a; /* 聖誕紅邊框 */
         }
 
-        .input_video { display: none; }
+        /* 背景裝飾 */
+        .bg-pattern {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgb3BhY2l0eT0iMC4xIj48dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtc2l6ZT0iMjAiPkl8PC90ZXh0Pjwvc3ZnPg==');
+            opacity: 0.1;
+            pointer-events: none;
+        }
 
         canvas {
             display: block;
@@ -42,223 +42,469 @@
             transform: scaleX(-1); /* 鏡像翻轉 */
         }
 
-        #loading {
+        .input_video { display: none; }
+
+        /* UI 層 */
+        #ui-layer {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 26px;
-            background: rgba(196, 30, 58, 0.9);
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
-        /* 遊戲介面文字 */
-        .ui-text {
-            position: absolute;
-            pointer-events: none;
-            width: 100%;
-            text-align: center;
-            text-shadow: 2px 2px 4px #000;
+        #score-board {
+            font-size: 40px;
+            color: #fff;
+            text-shadow: 0 0 10px #00ff00;
+            display: flex;
+            gap: 20px;
         }
-        #top-instruction { top: 20px; font-size: 24px; color: #ffd700; }
-        #score-board { top: 60px; font-size: 28px; }
-        #result-feedback { 
-            top: 40%; 
-            font-size: 60px; 
-            font-weight: bold; 
+
+        .lives { color: #ff0000; }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        h1 { color: #FFD700; font-size: 60px; margin: 0; text-shadow: 3px 3px 0 #c41e3a; }
+        p { color: #fff; font-size: 24px; margin: 20px 0; }
+        
+        button {
+            padding: 15px 40px;
+            font-size: 28px;
+            background: #c41e3a;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(196, 30, 58, 0.4);
+            transition: transform 0.2s;
+            font-family: inherit;
+        }
+        button:hover { transform: scale(1.1); background: #e74c3c; }
+
+        #combo-text {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80px;
+            color: #FFD700;
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: opacity 0.2s;
+            text-shadow: 0 0 20px orange;
         }
     </style>
 </head>
 <body>
 
 <div id="game-container">
+    <div class="bg-pattern"></div>
     <video class="input_video"></video>
-    <canvas class="output_canvas" width="1280" height="720"></canvas>
-    
-    <div id="top-instruction" class="ui-text">請將手停留在正確答案上方來選擇 (Hover to Select)</div>
-    <div id="score-board" class="ui-text">得分: <span id="score">0</span> / 題數: <span id="question-count">0</span></div>
-    <div id="result-feedback" class="ui-text">Correct!</div>
+    <canvas class="output_canvas"></canvas>
 
-    <div id="loading">
-        🎄 準備聖誕教材中...<br>請允許攝影機權限<br>並舉起你的手
+    <div id="ui-layer">
+        <div id="score-board">
+            <div>SCORE: <span id="score">0</span></div>
+            <div class="lives" id="lives">❤️❤️❤️</div>
+        </div>
+        <div id="combo-text">COMBO!</div>
+    </div>
+
+    <div id="start-screen">
+        <h1>🎄 聖誕單字忍者</h1>
+        <p>揮動你的手指切開單字卡，避開煤炭！</p>
+        <p style="font-size: 16px; color: #aaa;">(請允許攝影機權限，載入需要約 5-10 秒)</p>
+        <button onclick="startGame()">START GAME</button>
+    </div>
+
+    <div id="game-over-screen" style="display: none;">
+        <h1>GAME OVER</h1>
+        <p>Final Score: <span id="final-score">0</span></p>
+        <button onclick="resetGame()">PLAY AGAIN</button>
     </div>
 </div>
 
 <script>
-    const videoElement = document.getElementsByClassName('input_video')[0];
-    const canvasElement = document.getElementsByClassName('output_canvas')[0];
-    const canvasCtx = canvasElement.getContext('2d');
-    const loadingEl = document.getElementById('loading');
+    const canvas = document.querySelector('.output_canvas');
+    const ctx = canvas.getContext('2d');
+    const videoElement = document.querySelector('.input_video');
     const scoreEl = document.getElementById('score');
-    const qCountEl = document.getElementById('question-count');
-    const feedbackEl = document.getElementById('result-feedback');
+    const livesEl = document.getElementById('lives');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const comboEl = document.getElementById('combo-text');
 
-    // --- 資料庫 ---
-    const vocabList = [
-        { emoji: '🎅', word: 'Santa Claus' },
-        { emoji: '🎄', word: 'Christmas Tree' },
-        { emoji: '🎁', word: 'Gift' },
-        { emoji: '🦌', word: 'Reindeer' },
-        { emoji: '⛄', word: 'Snowman' },
-        { emoji: '🔔', word: 'Bell' },
-        { emoji: '🧦', word: 'Stocking' },
-        { emoji: '🍪', word: 'Cookie' },
-        { emoji: '🥛', word: 'Milk' },
-        { emoji: '⭐', word: 'Star' },
-        { emoji: '❄️', word: 'Snowflake' },
-        { emoji: '🕯️', word: 'Candle' }
+    // 調整 Canvas 尺寸
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- 資料庫 (單字卡) ---
+    const VOCAB_DB = [
+        { word: 'Santa', icon: '🎅', color: '#ffcccc' },
+        { word: 'Tree', icon: '🎄', color: '#ccffcc' },
+        { word: 'Gift', icon: '🎁', color: '#ffffcc' },
+        { word: 'Star', icon: '⭐', color: '#ffffaa' },
+        { word: 'Snow', icon: '❄️', color: '#eefaff' },
+        { word: 'Bell', icon: '🔔', color: '#ffebcd' },
+        { word: 'Sock', icon: '🧦', color: '#ffe6e6' },
+        { word: 'Deer', icon: '🦌', color: '#ebd6ad' },
+        { word: 'Elf', icon: '🧝', color: '#d0f0c0' },
+        { word: 'Candy', icon: '🍬', color: '#ffccf2' }
     ];
 
-    // --- 遊戲狀態 ---
+    // --- 遊戲參數 ---
     let gameState = {
+        isPlaying: false,
         score: 0,
-        questionCount: 0,
-        isHandsDetected: false,
-        handX: 0,
-        handY: 0,
-        currentQuestion: null,
-        options: [], // 存放三個按鈕物件
-        isProcessingAnswer: false // 防止重複觸發
+        lives: 3,
+        objects: [], // 飛在空中的物體
+        particles: [], // 切開的特效
+        slices: [], // 刀光軌跡
+        hand: { x: -100, y: -100, prevX: -100, prevY: -100, speed: 0 },
+        combo: 0,
+        comboTimer: null
     };
 
-    // --- 按鈕類別 ---
-    class OptionButton {
-        constructor(x, y, width, height, text, isCorrect) {
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
-            this.text = text;
-            this.isCorrect = isCorrect;
-            this.hoverProgress = 0; // 0 到 100
-            this.hoverSpeed = 2.5; // 懸停增加速度
+    const GRAVITY = 0.25;
+    const BLADE_LIFE = 10; // 刀光殘留幀數
+    const SPAWN_RATE = 50; // 產生頻率
+    let frameCount = 0;
+
+    // --- 聲音合成 (TTS) ---
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 1.2;
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    // --- 類別定義 ---
+
+    // 1. 遊戲物件 (卡片或炸彈)
+    class GameObject {
+        constructor() {
+            this.active = true;
+            this.radius = 60; // 碰撞半徑
+            
+            // 隨機發射位置 (底部)
+            this.x = Math.random() * (canvas.width - 200) + 100;
+            this.y = canvas.height + 100;
+            
+            // 發射速度 (往上拋，稍微往中間偏)
+            this.vx = (Math.random() - 0.5) * 6; // 水平隨機
+            // 如果在左邊，往右拋；在右邊，往左拋
+            if (this.x < canvas.width/2) this.vx = Math.abs(this.vx);
+            else this.vx = -Math.abs(this.vx);
+
+            this.vy = -(Math.random() * 8 + 14); // 垂直向上力度
+            this.rotation = Math.random() * Math.PI * 2;
+            this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+
+            // 決定類型 (20% 機率是炸彈)
+            if (Math.random() < 0.2) {
+                this.type = 'bomb';
+                this.icon = '⚫'; // 煤炭
+                this.word = 'COAL';
+                this.color = '#333';
+            } else {
+                this.type = 'card';
+                const data = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
+                this.icon = data.icon;
+                this.word = data.word;
+                this.color = data.color;
+            }
         }
 
-        draw(ctx, handX, handY) {
-            // 檢查是否懸停
-            let isHovering = handX > this.x && handX < this.x + this.width &&
-                             handY > this.y && handY < this.y + this.height;
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += GRAVITY; // 重力
+            this.rotation += this.rotationSpeed;
 
-            if (isHovering && !gameState.isProcessingAnswer) {
-                this.hoverProgress = Math.min(100, this.hoverProgress + this.hoverSpeed);
-            } else {
-                this.hoverProgress = Math.max(0, this.hoverProgress - this.hoverSpeed * 2);
+            // 邊界檢查 (掉出畫面)
+            if (this.y > canvas.height + 150) {
+                this.active = false;
+                if (this.type === 'card' && gameState.isPlaying) {
+                    loseLife(); // 漏接單字卡扣血
+                }
             }
-            
-            // 繪製按鈕背景
-            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-            if (this.hoverProgress >= 100) ctx.fillStyle = "#FFD700"; // 觸發時變金色
+        }
 
-            ctx.beginPath();
-            ctx.roundRect(this.x, this.y, this.width, this.height, 15);
-            ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = "#c41e3a"; // 紅框
-            ctx.stroke();
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
 
-            // 繪製懸停進度條 (底部填充)
-            if (this.hoverProgress > 0) {
-                let progressHeight = (this.hoverProgress / 100) * this.height;
-                ctx.fillStyle = "rgba(46, 204, 113, 0.6)"; // 綠色進度
+            // 繪製卡片樣式
+            if (this.type === 'bomb') {
+                // 炸彈 (煤炭)
                 ctx.beginPath();
-                // 只填充底部一部分
-                 ctx.roundRect(this.x, this.y + this.height - progressHeight, this.width, progressHeight, [0,0,15,15]);
+                ctx.arc(0, 0, 40, 0, Math.PI * 2);
+                ctx.fillStyle = "#222";
+                ctx.fill();
+                ctx.strokeStyle = "#555";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.font = "40px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("💣", 0, 0);
+                
+                // 導火線閃爍
+                if (frameCount % 10 < 5) {
+                    ctx.beginPath();
+                    ctx.arc(25, -25, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = "red";
+                    ctx.fill();
+                }
+            } else {
+                // 單字卡 (拍立得風格)
+                const w = 120;
+                const h = 150;
+                
+                // 卡片陰影
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.shadowBlur = 10;
+                
+                // 卡片底色
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(-w/2, -h/2, w, h);
+                
+                // 圖片區域
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-w/2 + 10, -h/2 + 10, w - 20, w - 20);
+                
+                // 陰影重置
+                ctx.shadowBlur = 0;
+
+                // Emoji
+                ctx.font = "60px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.icon, 0, -15);
+
+                // 文字
+                ctx.fillStyle = "#333";
+                ctx.font = "bold 20px Arial";
+                ctx.fillText(this.word, 0, 50);
+            }
+
+            ctx.restore();
+        }
+    }
+
+    // 2. 粒子效果 (切開後的碎片)
+    class Particle {
+        constructor(x, y, color, isEmoji = false, text = '') {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 10;
+            this.vy = (Math.random() - 0.5) * 10;
+            this.life = 1.0;
+            this.color = color;
+            this.isEmoji = isEmoji;
+            this.text = text;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += GRAVITY;
+            this.life -= 0.02;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.life;
+            if (this.isEmoji) {
+                ctx.font = "30px Arial";
+                ctx.fillText(this.text, this.x, this.y);
+            } else {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 4, 0, Math.PI*2);
                 ctx.fill();
             }
-
-            // 繪製文字
-            ctx.fillStyle = "#000";
-            ctx.font = "bold 36px Arial";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
-
-            return this.hoverProgress >= 100; // 回傳是否觸發選擇
+            ctx.restore();
         }
     }
 
     // --- 遊戲邏輯 ---
 
-    function startNewRound() {
-        gameState.isProcessingAnswer = false;
-        gameState.questionCount++;
-        qCountEl.innerText = gameState.questionCount;
-
-        // 1. 選出正確答案
-        let correctIndex = Math.floor(Math.random() * vocabList.length);
-        gameState.currentQuestion = vocabList[correctIndex];
-
-        // 2. 選出兩個錯誤答案
-        let wrongOptions = [];
-        let temp List = [...vocabList];
-        temp List.splice(correctIndex, 1); // 移除正確答案
-        shuffleArray(temp List);
-        wrongOptions.push(temp List[0].word);
-        wrongOptions.push(temp List[1].word);
-
-        // 3. 組合並打亂選項
-        let finalOptionsWords = [gameState.currentQuestion.word, ...wrongOptions];
-        shuffleArray(finalOptionsWords);
-
-        // 4. 建立按鈕物件
-        gameState.options = [];
-        const btnWidth = 300;
-        const btnHeight = 100;
-        const startX = (canvasElement.width - (btnWidth * 3 + 40 * 2)) / 2;
-        const btnY = 500;
-
-        for (let i = 0; i < 3; i++) {
-            let isCorrect = (finalOptionsWords[i] === gameState.currentQuestion.word);
-            gameState.options.push(new OptionButton(
-                startX + i * (btnWidth + 40),
-                btnY,
-                btnWidth,
-                btnHeight,
-                finalOptionsWords[i],
-                isCorrect
-            ));
-        }
+    function initGame() {
+        startScreen.style.display = "none";
+        gameOverScreen.style.display = "none";
+        gameState.score = 0;
+        gameState.lives = 3;
+        gameState.objects = [];
+        gameState.particles = [];
+        gameState.isPlaying = true;
+        updateUI();
     }
 
-    function handleChoice(selectedBtn) {
-        gameState.isProcessingAnswer = true;
+    function loseLife() {
+        if (!gameState.isPlaying) return;
+        gameState.lives--;
+        updateUI();
         
-        if (selectedBtn.isCorrect) {
-            gameState.score += 10;
-            showFeedback("Correct! ✅", "#2ecc71");
-        } else {
-             showFeedback("Wrong! ❌", "#e74c3c");
+        // 紅色閃爍
+        canvas.style.backgroundColor = "rgba(255,0,0,0.5)";
+        setTimeout(() => canvas.style.backgroundColor = "", 100);
+
+        if (gameState.lives <= 0) {
+            endGame();
         }
+    }
+
+    function endGame() {
+        gameState.isPlaying = false;
+        document.getElementById('final-score').innerText = gameState.score;
+        gameOverScreen.style.display = "flex";
+    }
+
+    function updateUI() {
         scoreEl.innerText = gameState.score;
-
-        // 2秒後下一題
-        setTimeout(() => {
-            feedbackEl.style.opacity = 0;
-            startNewRound();
-        }, 2000);
+        let livesStr = "";
+        for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
+        livesEl.innerHTML = livesStr;
     }
 
-    function showFeedback(text, color) {
-        feedbackEl.innerText = text;
-        feedbackEl.style.color = color;
-        feedbackEl.style.opacity = 1;
+    function checkCombo() {
+        gameState.combo++;
+        if (gameState.combo > 1) {
+            comboEl.innerText = gameState.combo + " COMBO!";
+            comboEl.style.opacity = 1;
+            gameState.score += gameState.combo * 5; // Combo 加分
+        }
+        
+        // 重置 Combo Timer
+        if (gameState.comboTimer) clearTimeout(gameState.comboTimer);
+        gameState.comboTimer = setTimeout(() => {
+            gameState.combo = 0;
+            comboEl.style.opacity = 0;
+        }, 800); // 0.8秒內切下一個才算 Combo
     }
 
-    // 輔助函式：陣列洗牌
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
+    function createSliceEffect(obj) {
+        // 產生碎片
+        for (let i = 0; i < 10; i++) {
+            gameState.particles.push(new Particle(obj.x, obj.y, obj.color));
+        }
+        // 產生文字碎片
+        gameState.particles.push(new Particle(obj.x, obj.y, null, true, obj.word));
+    }
+
+    // --- 主迴圈 ---
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        frameCount++;
+
+        if (gameState.isPlaying) {
+            // 生成物件
+            if (frameCount % SPAWN_RATE === 0) {
+                gameState.objects.push(new GameObject());
+            }
+
+            // 更新物件
+            for (let i = gameState.objects.length - 1; i >= 0; i--) {
+                let obj = gameState.objects[i];
+                obj.update();
+                obj.draw();
+
+                if (!obj.active) {
+                    gameState.objects.splice(i, 1);
+                    continue;
+                }
+
+                // 碰撞檢測 (切水果邏輯)
+                // 條件：手部速度夠快 + 距離夠近
+                let dx = gameState.hand.x - obj.x;
+                let dy = gameState.hand.y - obj.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < obj.radius && gameState.hand.speed > 5) {
+                    // 切到了！
+                    if (obj.type === 'bomb') {
+                        // 切到炸彈
+                        createSliceEffect(obj);
+                        gameState.objects.splice(i, 1);
+                        speak("Oh no!");
+                        endGame(); // 立即結束
+                    } else {
+                        // 切到單字卡
+                        gameState.score += 10;
+                        speak(obj.word); // 唸出單字
+                        createSliceEffect(obj);
+                        checkCombo();
+                        gameState.objects.splice(i, 1);
+                        updateUI();
+                    }
+                }
+            }
+        }
+
+        // 繪製粒子
+        for (let i = gameState.particles.length - 1; i >= 0; i--) {
+            let p = gameState.particles[i];
+            p.update();
+            p.draw();
+            if (p.life <= 0) gameState.particles.splice(i, 1);
+        }
+
+        // 繪製刀光 (Blade)
+        drawBlade();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function drawBlade() {
+        if (gameState.slices.length < 2) return;
+
+        ctx.beginPath();
+        ctx.moveTo(gameState.slices[0].x, gameState.slices[0].y);
+        
+        for (let i = 1; i < gameState.slices.length; i++) {
+            let point = gameState.slices[i];
+            ctx.lineTo(point.x, point.y);
+        }
+
+        // 刀光樣式
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "#00ffff"; // 藍色光暈
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 8;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+        
+        ctx.shadowBlur = 0; // 重置
+
+        // 移除舊的軌跡
+        if (gameState.slices.length > BLADE_LIFE) {
+            gameState.slices.shift();
         }
     }
 
+    // --- MediaPipe 手勢偵測 ---
 
-    // --- MediaPipe 設定 ---
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({
         maxNumHands: 1,
@@ -266,87 +512,49 @@
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7
     });
-    hands.onResults(onResults);
+
+    hands.onResults((results) => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            // 取得食指指尖 (Index 8)
+            const x = landmarks[8].x * canvas.width;
+            const y = landmarks[8].y * canvas.height;
+
+            // 計算速度
+            const dx = x - gameState.hand.prevX;
+            const dy = y - gameState.hand.prevY;
+            gameState.hand.speed = Math.sqrt(dx*dx + dy*dy);
+
+            // 更新位置
+            gameState.hand.prevX = gameState.hand.x;
+            gameState.hand.prevY = gameState.hand.y;
+            gameState.hand.x = x;
+            gameState.hand.y = y;
+
+            // 加入軌跡點
+            gameState.slices.push({x: x, y: y});
+
+        } else {
+            gameState.hand.speed = 0;
+            // 如果手消失，清空軌跡
+            if(gameState.slices.length > 0) gameState.slices.shift(); 
+        }
+    });
 
     const camera = new Camera(videoElement, {
         onFrame: async () => { await hands.send({image: videoElement}); },
         width: 1280,
         height: 720
     });
-
-    function onResults(results) {
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-        if (loadingEl.style.display !== 'none' && results.multiHandLandmarks.length > 0) {
-            loadingEl.style.display = 'none';
-            startNewRound();
-        }
-
-        // 1. 處理手部追蹤
-        if (results.multiHandLandmarks.length > 0) {
-            gameState.isHandsDetected = true;
-            const landmarks = results.multiHandLandmarks[0];
-            // 使用食指指尖 (Index Finger Tip, ID: 8)
-            gameState.handX = landmarks[8].x * canvasElement.width;
-            gameState.handY = landmarks[8].y * canvasElement.height;
-        } else {
-            gameState.isHandsDetected = false;
-        }
-
-        // 2. 繪製遊戲內容
-        if (gameState.currentQuestion) {
-            // 繪製題目 Emoji
-            canvasCtx.font = "200px Arial";
-            canvasCtx.textAlign = "center";
-            canvasCtx.textBaseline = "middle";
-            canvasCtx.fillText(gameState.currentQuestion.emoji, canvasElement.width / 2, 250);
-
-            // 繪製選項按鈕並檢查互動
-            let triggeredBtn = null;
-            gameState.options.forEach(btn => {
-                // 如果手有偵測到，傳入座標，否則傳入畫面外座標
-                let isTriggered = btn.draw(canvasCtx, 
-                    gameState.isHandsDetected ? gameState.handX : -100, 
-                    gameState.isHandsDetected ? gameState.handY : -100
-                );
-                if (isTriggered) triggeredBtn = btn;
-            });
-
-            // 如果有按鈕被觸發且尚未處理
-            if (triggeredBtn && !gameState.isProcessingAnswer) {
-                handleChoice(triggeredBtn);
-            }
-        }
-
-        // 3. 最後繪製手部游標 (在最上層)
-        if (gameState.isHandsDetected) {
-            drawCursor(gameState.handX, gameState.handY);
-        } else if (loadingEl.style.display === 'none') {
-            // 提示找不到手
-             canvasCtx.font = "30px Arial";
-             canvasCtx.fillStyle = "rgba(255,255,255,0.7)";
-             canvasCtx.textAlign = "center";
-             canvasCtx.fillText("找不到手手... 🖐️", canvasElement.width/2, canvasElement.height - 50);
-        }
-    }
-
-    function drawCursor(x, y) {
-        canvasCtx.font = "80px Arial";
-        canvasCtx.textAlign = "center";
-        canvasCtx.textBaseline = "top"; // 指尖在上方
-        // 繪製手指游標
-        canvasCtx.fillText("👆", x, y);
-        
-        // 繪製一個小光暈讓它更明顯
-        canvasCtx.beginPath();
-        canvasCtx.arc(x, y + 10, 15, 0, 2 * Math.PI);
-        canvasCtx.fillStyle = "rgba(255, 215, 0, 0.5)"; // 金色光暈
-        canvasCtx.fill();
-    }
-
+    
+    // 啟動
     camera.start();
+    gameLoop();
+
+    // UI 按鈕功能
+    window.startGame = initGame;
+    window.resetGame = initGame;
 
 </script>
-
 </body>
 </html>
