@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕聽力忍者 - 軌道版</title>
+    <title>聖誕聽力忍者 - 雙卡回合制</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -146,8 +146,7 @@
 
     <div id="start-screen">
         <h1>🎧 聖誕聽力忍者</h1>
-        <p>1. 聽音切圖 (例如: "Santa")<br>2. 左右會飛出不同卡片<br>3. 切對加分，切錯扣分</p>
-        <p style="font-size: 20px; color: #ccc;">(請開啟聲音並允許攝影機)</p>
+        <p>1. 題目唸完才會出現卡片<br>2. 每次只出現兩張 (一左一右)<br>3. 切完或掉落後才會出下一題</p>
         <button onclick="startGame()">START GAME</button>
     </div>
 
@@ -245,8 +244,8 @@
         { word: 'Cake', icon: '🎂', color: '#ffccf2' }
     ];
 
-    const GRAVITY = 0.12; 
-    const THROW_FORCE = 13;
+    const GRAVITY = 0.15; // 稍微快一點點，因為只有兩張
+    const THROW_FORCE = 14;
     
     let gameState = {
         isPlaying: false,
@@ -256,7 +255,9 @@
         objects: [],
         particles: [],
         slices: [],
-        hand: { x: -100, y: -100, prevX: -100, prevY: -100, speed: 0 }
+        hand: { x: -100, y: -100, prevX: -100, prevY: -100, speed: 0 },
+        isWaveActive: false, // 是否正在進行一波攻擊
+        waitingForNextWave: false // 是否正在等待下一波
     };
 
     let frameCount = 0;
@@ -271,40 +272,31 @@
         }
     }
 
-    // --- 遊戲物件 (包含位置邏輯) ---
     class GameObject {
-        constructor(data, laneIndex, totalLanes) {
+        constructor(data, laneIndex) {
             this.active = true;
             this.radius = 110;
             
-            // --- 絕對位置邏輯 (Lanes) ---
-            // laneIndex: 0 (左), 1 (中), 2 (右)
-            // 將畫面寬度均分，確保每張卡片有自己的軌道
-            
-            // 計算軌道中心點 (0.2, 0.5, 0.8)
-            // totalLanes 可能是 2 或 3
-            let laneWidth = canvas.width / totalLanes;
+            // --- 雙軌道位置邏輯 ---
+            // laneIndex: 0 (左), 1 (右)
+            let laneWidth = canvas.width / 2;
             let startX = laneWidth * laneIndex + (laneWidth / 2);
 
-            // 加入一點點隨機偏移 (±5%)，讓它不要太死板，但不會重疊
-            let randomOffset = (Math.random() - 0.5) * (laneWidth * 0.2);
-            
+            // 稍微隨機一點點
+            let randomOffset = (Math.random() - 0.5) * (laneWidth * 0.3);
             this.x = startX + randomOffset;
             this.y = canvas.height + 150;
 
-            // --- 速度控制 ---
-            // 左邊的卡片稍微往右飄，右邊的往左飄，中間的直上
+            // 往中心稍微修正的速度
             let drift = 0;
-            if (startX < canvas.width / 2) drift = 1.0; // 往右
-            else if (startX > canvas.width / 2) drift = -1.0; // 往左
+            if (startX < canvas.width / 2) drift = 0.5; // 左邊往右一點
+            else drift = -0.5; // 右邊往左一點
             
-            this.vx = drift + (Math.random() - 0.5) * 1; 
-            
-            this.vy = -(Math.random() * 3 + THROW_FORCE);
+            this.vx = drift + (Math.random() - 0.5) * 0.5; 
+            this.vy = -(Math.random() * 2 + THROW_FORCE); // 高度隨機
             this.rotation = Math.random() * Math.PI * 2;
             this.rotationSpeed = (Math.random() - 0.5) * 0.05;
 
-            // 資料設定
             this.icon = data.icon;
             this.word = data.word;
             this.color = data.color;
@@ -390,8 +382,12 @@
         gameState.objects = [];
         gameState.particles = [];
         gameState.isPlaying = true;
+        gameState.isWaveActive = false;
+        gameState.waitingForNextWave = false;
         updateUI();
-        setTimeout(spawnWave, 1000);
+        
+        // 開始第一波
+        startNewWave();
     }
 
     function triggerWrongFeedback() {
@@ -428,56 +424,47 @@
         livesEl.innerHTML = livesStr;
     }
 
-    // --- 核心：發射波 ---
-    function spawnWave() {
-        if(!gameState.isPlaying) return;
+    // --- 新的回合制邏輯 ---
+    function startNewWave() {
+        if (!gameState.isPlaying) return;
+        
+        gameState.isWaveActive = true;
+        gameState.waitingForNextWave = false;
 
         // 1. 決定題目
         const targetData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
         gameState.targetWord = targetData.word;
 
-        // 2. 播放語音 (只唸單字)
+        // 2. 播放語音
         targetDisplayEl.innerText = "👂 Listen...";
-        speak(gameState.targetWord); // 只唸單字，拿掉 Find...
+        speak(gameState.targetWord);
         
+        // 1.5秒後顯示文字提示並發射卡片
         setTimeout(() => {
-            if(gameState.isPlaying) targetDisplayEl.innerText = "Target: " + gameState.targetWord;
+            if(!gameState.isPlaying) return;
+            targetDisplayEl.innerText = "Target: " + gameState.targetWord;
+            spawnCards(targetData);
         }, 1500);
+    }
 
-        // 3. 準備卡片資料
-        // 一次固定出 3 張 (左、中、右)
-        let totalCount = 3;
-        let cardsToSpawn = [];
-        
-        // 放入目標卡
-        cardsToSpawn.push(targetData);
-        
-        // 放入其他干擾卡 (不重複)
-        while(cardsToSpawn.length < totalCount) {
-            let wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
-            // 檢查是否重複
-            let isDuplicate = cardsToSpawn.some(c => c.word === wrongData.word);
-            if (!isDuplicate) cardsToSpawn.push(wrongData);
+    function spawnCards(targetData) {
+        // 準備兩張卡片：一張對的，一張錯的
+        let wrongData;
+        do {
+            wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
+        } while (wrongData.word === gameState.targetWord);
+
+        let cards = [targetData, wrongData];
+        // 隨機交換位置 (誰在左誰在右)
+        if (Math.random() < 0.5) {
+            cards = [wrongData, targetData];
         }
 
-        // 隨機打亂這些卡片的位置 (Shuffle)
-        for (let i = cardsToSpawn.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [cardsToSpawn[i], cardsToSpawn[j]] = [cardsToSpawn[j], cardsToSpawn[i]];
+        // 發射！
+        // i=0 是左軌道, i=1 是右軌道
+        for (let i = 0; i < 2; i++) {
+            gameState.objects.push(new GameObject(cards[i], i));
         }
-
-        // 4. 生成物件 (指定軌道)
-        // 使用 i 作為 laneIndex (0, 1, 2)
-        for(let i=0; i<totalCount; i++) {
-            // 每個物件生成時給予微小延遲，避免瞬間全部冒出來太嚇人
-            // 但因為軌道不同，其實同時出來也不會重疊
-            setTimeout(() => {
-                if(!gameState.isPlaying) return;
-                gameState.objects.push(new GameObject(cardsToSpawn[i], i, totalCount));
-            }, i * 200); 
-        }
-
-        setTimeout(spawnWave, 4000);
     }
 
     function gameLoop() {
@@ -485,6 +472,21 @@
         frameCount++;
 
         if (gameState.isPlaying) {
+            
+            // --- 檢查是否該結束這一波 ---
+            // 條件：正在進行波次 且 畫面上的物件已清空
+            if (gameState.isWaveActive && gameState.objects.length === 0) {
+                // 如果還沒有在等待下一波，就啟動等待程序
+                if (!gameState.waitingForNextWave) {
+                    gameState.waitingForNextWave = true;
+                    // 等 1 秒後開始下一波 (稍微喘口氣)
+                    setTimeout(() => {
+                        startNewWave();
+                    }, 1000);
+                }
+            }
+
+            // 更新物件
             for (let i = gameState.objects.length - 1; i >= 0; i--) {
                 let obj = gameState.objects[i];
                 obj.update();
@@ -580,7 +582,10 @@
     });
     
     camera.start();
-    gameLoop();
+    // 不要自動開始，等按鈕
+    // window.startGame = initGame; 
+    
+    // 初始化 UI 狀態
     window.startGame = initGame;
     window.resetGame = initGame;
 
