@@ -1,164 +1,180 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕忍者 - 靜音配對版</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Slow AR Ninja</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Varela+Round&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+      font-family: 'Varela Round', system-ui, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* 攝影機與畫布鏡像翻轉，符合直覺 */
+    .input_video, canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); 
+    }
     
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #1a1a1a;
-            font-family: 'Arial Black', sans-serif;
-            overflow: hidden;
-            user-select: none;
-        }
+    .input_video { z-index: 0; }
+    canvas { z-index: 1; }
 
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            /* 靜音版改用深藍色系，比較沈穩專注 */
-            background: radial-gradient(circle, #0f2027 0%, #203a43 50%, #2c5364 100%);
-            overflow: hidden;
-        }
+    /* UI 層 */
+    #ui-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+      background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.7) 100%);
+    }
 
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            transform: scaleX(-1);
-        }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+    }
 
-        .input_video { display: none; }
+    .stat-box {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 10px 25px;
+      border-radius: 50px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
 
-        /* UI 層 */
-        #ui-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
+    .stat-label { font-size: 14px; opacity: 0.8; margin-bottom: 2px; }
+    .stat-value { font-family: 'Fredoka One'; font-size: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+    #lives { color: #ff4757; }
 
-        #score-board {
-            font-size: 50px;
-            color: #fff;
-            text-shadow: 2px 2px 4px #000;
-            margin-bottom: 20px;
-        }
+    #target-container {
+      position: absolute;
+      top: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+    }
 
-        /* 題目顯示區 - 這是靜音版的核心 */
-        #target-box {
-            background: rgba(0, 0, 0, 0.7);
-            border: 4px solid #FFD700;
-            border-radius: 20px;
-            padding: 20px 50px;
-            text-align: center;
-            transition: transform 0.2s;
-        }
+    #target-box {
+      background: rgba(0, 0, 0, 0.6);
+      border: 3px solid #ffd700;
+      border-radius: 24px;
+      padding: 15px 50px;
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+      transition: transform 0.3s;
+    }
 
-        #target-label {
-            color: #aaa;
-            font-size: 24px;
-            margin-bottom: 5px;
-        }
+    #target-label { font-size: 14px; color: #ffd700; font-weight: bold; letter-spacing: 2px; }
+    #target-word { font-family: 'Fredoka One'; font-size: 50px; line-height: 1; margin-top: 5px; }
 
-        #target-word {
-            color: #FFD700;
-            font-size: 80px;
-            letter-spacing: 3px;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-        }
+    #status-text {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Fredoka One';
+      font-size: 80px;
+      text-shadow: 4px 4px 0 rgba(0,0,0,0.8);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 20;
+    }
 
-        .lives { 
-            position: absolute;
-            top: 30px;
-            right: 40px;
-            font-size: 40px; 
-            color: #ff3333;
-        }
+    .modal-screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+      pointer-events: auto;
+      text-align: center;
+      transition: opacity 0.5s;
+    }
 
-        /* 狀態文字 (Missed / Wrong) */
-        #status-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 100px;
-            font-weight: bold;
-            text-shadow: 4px 4px 0 #000;
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            z-index: 5;
-        }
-
-        #start-screen, #game-over-screen {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 10;
-            pointer-events: auto;
-        }
-
-        h1 { color: #fff; font-size: 60px; margin: 0; }
-        p { color: #ccc; font-size: 24px; margin: 20px 0; text-align: center; }
-        
-        button {
-            padding: 15px 50px;
-            font-size: 28px;
-            background: #FFD700;
-            color: #000;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover { transform: scale(1.05); background: #fff; }
-
-    </style>
+    .btn {
+      background: #e17055;
+      color: #fff;
+      border: none;
+      padding: 15px 50px;
+      font-size: 24px;
+      font-family: 'Fredoka One';
+      border-radius: 50px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    .btn:hover { transform: scale(1.05); background: #ff7675; }
+  </style>
 </head>
 <body>
 
 <div id="game-container">
-    <video class="input_video"></video>
+    <video class="input_video" playsinline muted autoplay></video>
     <canvas class="output_canvas"></canvas>
     
     <div id="status-text">MISSED!</div>
 
     <div id="ui-layer">
-        <div id="score-board">SCORE: <span id="score">0</span></div>
-        <div class="lives" id="lives">❤️❤️❤️</div>
+        <div class="top-bar">
+            <div class="stat-box">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Lives</div>
+                <div class="stat-value" id="lives">❤️❤️❤️</div>
+            </div>
+        </div>
         
-        <div id="target-box">
-            <div id="target-label">TARGET</div>
-            <div id="target-word">Wait...</div>
+        <div id="target-container">
+            <div id="target-box">
+                <div id="target-label">SLICE THIS</div>
+                <div id="target-word">Wait...</div>
+            </div>
         </div>
     </div>
 
-    <div id="start-screen">
-        <h1>🤫 靜音配對忍者</h1>
-        <p>看上方的題目單字<br>切開對應的圖片<br>(完全無聲音)</p>
-        <button onclick="startGame()">START</button>
+    <div id="start-screen" class="modal-screen">
+        <h1 style="font-family:'Fredoka One'; font-size:50px; color:#ffd700;">Slow AR Ninja</h1>
+        <p style="color:#ccc; font-size:18px;">
+            1. 每次只出現兩張<br>
+            2. 卡片會像氣球一樣慢慢飛<br>
+            3. 全部消失後才會出下一題
+        </p>
+        <button class="btn" onclick="startGame()">開啟鏡頭 & 開始</button>
     </div>
 
-    <div id="game-over-screen" style="display: none;">
-        <h1>GAME OVER</h1>
-        <p>Score: <span id="final-score">0</span></p>
-        <button onclick="resetGame()">REPLAY</button>
+    <div id="game-over-screen" class="modal-screen" style="display: none; opacity: 0;">
+        <h1 style="color: #fff;">GAME OVER</h1>
+        <div style="font-family: 'Fredoka One'; font-size: 60px; color: #ffd700; margin: 20px;" id="final-score">0</div>
+        <button class="btn" onclick="resetGame()">再玩一次</button>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
     const canvas = document.querySelector('.output_canvas');
@@ -173,28 +189,34 @@
     const statusTextEl = document.getElementById('status-text');
 
     function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        ctx.scale(dpr, dpr);
+        window.W = window.innerWidth;
+        window.H = window.innerHeight;
     }
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // --- 資料庫 ---
     const VOCAB_DB = [
-        { word: 'SANTA', icon: '🎅', color: '#ffcccc' },
-        { word: 'TREE', icon: '🎄', color: '#ccffcc' },
-        { word: 'GIFT', icon: '🎁', color: '#ffffcc' },
-        { word: 'STAR', icon: '⭐', color: '#ffffaa' },
-        { word: 'SNOW', icon: '❄️', color: '#eefaff' },
-        { word: 'BELL', icon: '🔔', color: '#ffebcd' },
-        { word: 'SOCK', icon: '🧦', color: '#ffe6e6' },
-        { word: 'DEER', icon: '🦌', color: '#ebd6ad' },
-        { word: 'ELF', icon: '🧝', color: '#d0f0c0' },
-        { word: 'CAKE', icon: '🎂', color: '#ffccf2' }
+        { word: 'SANTA', icon: '🎅', color: '#ff7675' },
+        { word: 'TREE', icon: '🎄', color: '#55efc4' },
+        { word: 'GIFT', icon: '🎁', color: '#ffeaa7' },
+        { word: 'STAR', icon: '⭐', color: '#fdcb6e' },
+        { word: 'SNOW', icon: '❄️', color: '#74b9ff' },
+        { word: 'BELL', icon: '🔔', color: '#fab1a0' },
+        { word: 'SOCK', icon: '🧦', color: '#ffcccc' },
+        { word: 'DEER', icon: '🦌', color: '#e17055' },
+        { word: 'ELF', icon: '🧝', color: '#00b894' },
+        { word: 'CAKE', icon: '🎂', color: '#fd79a8' }
     ];
 
-    const GRAVITY = 0.12; 
-    const THROW_FORCE = 13;
+    // --- 物理參數調整區 ---
+    const GRAVITY = 0.06;     // 重力極低，產生漂浮感
+    const THROW_FORCE = 11;   // 上拋力道減弱，配合低重力
     
     let gameState = {
         isPlaying: false,
@@ -203,7 +225,7 @@
         targetWord: null,
         objects: [],
         particles: [],
-        slices: [],
+        slices: [], 
         hand: { x: -100, y: -100, prevX: -100, prevY: -100, speed: 0 },
         isWaveActive: false,
         waitingForNextWave: false
@@ -211,45 +233,47 @@
 
     let frameCount = 0;
 
-    // --- 遊戲物件 ---
+    function showStatus(text, color) {
+        statusTextEl.innerText = text;
+        statusTextEl.style.color = color;
+        statusTextEl.style.opacity = 1;
+        setTimeout(() => { statusTextEl.style.opacity = 0; }, 800);
+    }
+
     class GameObject {
         constructor(data, laneIndex) {
             this.active = true;
-            this.radius = 110;
+            this.radius = 110; 
             
-            // 嚴格的左右分道 (0:左, 1:右)
-            let laneWidth = canvas.width / 2;
+            // 雙軌道: 0(左), 1(右)
+            let laneWidth = window.W / 2;
             let startX = laneWidth * laneIndex + (laneWidth / 2);
 
-            // 輕微隨機偏移
-            this.x = startX + (Math.random() - 0.5) * 50; 
-            this.y = canvas.height + 150;
-
-            // 輕微向中心偏移
-            let drift = (startX < canvas.width / 2) ? 0.3 : -0.3;
+            this.x = startX + (Math.random() - 0.5) * 30; 
+            this.y = window.H + 150;
             
-            this.vx = drift + (Math.random() - 0.5) * 0.2; 
+            // 讓卡片稍微往中間飄，但速度很慢
+            let drift = (startX < window.W / 2) ? 0.2 : -0.2;
+            this.vx = drift + (Math.random() - 0.5) * 0.1; 
+            
             this.vy = -(Math.random() * 2 + THROW_FORCE); 
             this.rotation = Math.random() * Math.PI * 2;
-            this.rotationSpeed = (Math.random() - 0.5) * 0.05;
+            this.rotationSpeed = (Math.random() - 0.5) * 0.02; // 旋轉也變慢
 
             this.icon = data.icon;
-            this.word = data.word; // 卡片上也顯示單字，方便對照
+            this.word = data.word;
             this.color = data.color;
             this.isTarget = (this.word === gameState.targetWord);
         }
 
         update() {
-            this.x += this.vx;
-            this.y += this.vy;
-            this.vy += GRAVITY;
-            this.rotation += this.rotationSpeed;
+            this.x += this.vx; this.y += this.vy; this.vy += GRAVITY; this.rotation += this.rotationSpeed;
             
             // 掉出畫面
-            if (this.y > canvas.height + 200 && this.active) {
+            if (this.y > window.H + 200 && this.active) {
                 this.active = false;
                 if (this.isTarget && gameState.isPlaying) {
-                    showStatus("MISSED", "#e67e22");
+                    showStatus("MISSED", "#e17055");
                     gameState.lives--;
                     updateUI();
                     if (gameState.lives <= 0) endGame();
@@ -261,32 +285,23 @@
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.rotate(this.rotation);
-            const w = 220; const h = 280;
-            
-            // 陰影
-            ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.shadowBlur = 15;
-            
-            // 卡片底
+            const w = 220; const h = 280; const r = 20;
+
+            ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 25;
             ctx.fillStyle = "#fff";
-            ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 15); ctx.fill();
-            
-            // 顏色框
-            ctx.fillStyle = this.color;
-            ctx.fillRect(-w/2 + 15, -h/2 + 15, w - 30, w - 30);
+            ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, r); ctx.fill();
             
             ctx.shadowBlur = 0;
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.roundRect(-w/2 + 15, -h/2 + 15, w - 30, w - 30 - 60, r-5); ctx.fill();
             
-            // 圖片
-            ctx.font = "120px Arial";
+            ctx.font = "120px 'Segoe UI Emoji'";
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(this.icon, 0, -20);
+            ctx.fillText(this.icon, 0, -30);
             
-            // 文字 (輔助視覺配對)
-            ctx.fillStyle = "#000";
-            ctx.font = "bold 40px Arial";
-            ctx.fillText(this.word, 0, 90);
-            
+            ctx.fillStyle = "#2d3436";
+            ctx.font = "900 36px 'Fredoka One', sans-serif";
+            ctx.fillText(this.word, 0, 95);
             ctx.restore();
         }
     }
@@ -294,38 +309,39 @@
     class Particle {
         constructor(x, y, color, isText = false, text = '') {
             this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 15;
-            this.vy = (Math.random() - 0.5) * 15;
+            this.vx = (Math.random() - 0.5) * 10; // 粒子爆發速度也稍微減慢
+            this.vy = (Math.random() - 0.5) * 10;
             this.life = 1.0;
             this.color = color;
             this.isText = isText;
             this.text = text;
+            this.scale = 1;
         }
         update() {
-            this.x += this.vx; this.y += this.vy; this.vy += GRAVITY; this.life -= 0.03;
+            this.x += this.vx; this.y += this.vy; this.vy += GRAVITY; this.life -= 0.02; // 粒子消失變慢
+            if(this.isText) this.scale += 0.02;
         }
         draw() {
-            ctx.save(); ctx.globalAlpha = this.life;
+            ctx.save(); ctx.globalAlpha = Math.max(0, this.life);
             if (this.isText) {
-                ctx.font = "900 60px Arial"; 
-                ctx.fillStyle = this.color; 
-                ctx.strokeStyle = "white";
-                ctx.lineWidth = 3;
-                ctx.strokeText(this.text, this.x, this.y);
-                ctx.fillText(this.text, this.x, this.y);
+                ctx.translate(this.x, this.y); ctx.scale(this.scale, this.scale);
+                ctx.font = "900 50px 'Fredoka One'"; ctx.fillStyle = this.color; 
+                ctx.strokeStyle = "white"; ctx.lineWidth = 4;
+                ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
             } else {
                 ctx.fillStyle = this.color; 
-                ctx.beginPath(); ctx.arc(this.x, this.y, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.x, this.y, 8 * this.life, 0, Math.PI*2); ctx.fill();
             }
             ctx.restore();
         }
     }
 
-    // --- 遊戲邏輯 ---
-
     function initGame() {
-        startScreen.style.display = "none";
+        startScreen.style.opacity = 0;
+        setTimeout(() => startScreen.style.display = "none", 300);
         gameOverScreen.style.display = "none";
+        gameOverScreen.style.opacity = 0;
+
         gameState.score = 0;
         gameState.lives = 3;
         gameState.objects = [];
@@ -334,70 +350,50 @@
         gameState.isWaveActive = false;
         gameState.waitingForNextWave = false;
         updateUI();
-        
         startNewWave();
-    }
-
-    function showStatus(text, color) {
-        statusTextEl.innerText = text;
-        statusTextEl.style.color = color;
-        statusTextEl.style.opacity = 1;
-        setTimeout(() => {
-            statusTextEl.style.opacity = 0;
-        }, 800);
+        
+        if (!cameraStarted) { camera.start(); cameraStarted = true; }
     }
 
     function startNewWave() {
         if (!gameState.isPlaying) return;
-        
         gameState.isWaveActive = true;
         gameState.waitingForNextWave = false;
 
-        // 1. 決定題目
         const targetData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
         gameState.targetWord = targetData.word;
 
-        // 2. 更新上方 UI
         targetWordEl.innerText = gameState.targetWord;
-        targetBoxEl.style.transform = "scale(1.2)"; // 放大提示
+        targetBoxEl.style.transform = "scale(1.2)";
         setTimeout(() => targetBoxEl.style.transform = "scale(1)", 300);
 
-        // 3. 延遲後發射 (給玩家看題目的時間)
-        setTimeout(() => {
-            if(!gameState.isPlaying) return;
-            spawnCards(targetData);
-        }, 1200);
+        // 題目顯示 1.5 秒後才發射，給足準備時間
+        setTimeout(() => { if(gameState.isPlaying) spawnCards(targetData); }, 1500);
     }
 
     function spawnCards(targetData) {
-        // 準備兩張卡
         let wrongData;
-        do {
-            wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
-        } while (wrongData.word === gameState.targetWord);
+        do { wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)]; } 
+        while (wrongData.word === gameState.targetWord);
 
         let cards = [targetData, wrongData];
-        // 隨機交換左右
         if (Math.random() < 0.5) cards = [wrongData, targetData];
 
-        // 左邊一張 (Lane 0), 右邊一張 (Lane 1)
+        // 嚴格生成兩張
         gameState.objects.push(new GameObject(cards[0], 0));
         gameState.objects.push(new GameObject(cards[1], 1));
     }
 
     function gameLoop() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, window.W, window.H);
         frameCount++;
 
         if (gameState.isPlaying) {
-            
-            // 檢查波次結束
-            if (gameState.isWaveActive && gameState.objects.length === 0) {
-                if (!gameState.waitingForNextWave) {
-                    gameState.waitingForNextWave = true;
-                    // 空檔 1 秒後下一題
-                    setTimeout(startNewWave, 1000);
-                }
+            // 核心邏輯：必須所有物件清空 (length === 0) 才會觸發下一波
+            if (gameState.isWaveActive && gameState.objects.length === 0 && !gameState.waitingForNextWave) {
+                gameState.waitingForNextWave = true;
+                // 清空後等待 1 秒才開始新題目
+                setTimeout(startNewWave, 1000);
             }
 
             for (let i = gameState.objects.length - 1; i >= 0; i--) {
@@ -410,7 +406,6 @@
                     continue;
                 }
 
-                // 切割判定
                 let dx = gameState.hand.x - obj.x;
                 let dy = gameState.hand.y - obj.y;
                 let dist = Math.sqrt(dx*dx + dy*dy);
@@ -419,10 +414,11 @@
                     if (obj.word === gameState.targetWord) {
                         gameState.score += 10;
                         createSliceEffect(obj, true);
+                        showStatus("NICE!", "#2ecc71");
                         gameState.objects.splice(i, 1);
                         updateUI();
                     } else {
-                        showStatus("WRONG", "#ff3333");
+                        showStatus("WRONG", "#d63031");
                         gameState.lives--;
                         createSliceEffect(obj, false);
                         gameState.objects.splice(i, 1);
@@ -433,7 +429,6 @@
             }
         }
 
-        // 粒子
         for (let i = gameState.particles.length - 1; i >= 0; i--) {
             let p = gameState.particles[i];
             p.update();
@@ -446,35 +441,26 @@
     }
 
     function createSliceEffect(obj, isCorrect) {
-        let color = isCorrect ? "#2ecc71" : "#ff3333";
-        let msg = isCorrect ? "YES!" : "NO!";
-        for (let i = 0; i < 15; i++) gameState.particles.push(new Particle(obj.x, obj.y, color));
+        let color = isCorrect ? "#2ecc71" : "#d63031"; 
+        let msg = isCorrect ? "+10" : "-1 ❤";
+        for (let i = 0; i < 15; i++) gameState.particles.push(new Particle(obj.x, obj.y, obj.color));
         gameState.particles.push(new Particle(obj.x, obj.y, color, true, msg));
     }
 
     function drawBlade() {
         if (gameState.slices.length < 2) return;
+        ctx.shadowBlur = 15; ctx.shadowColor = "#00ffff";
         ctx.beginPath();
         ctx.moveTo(gameState.slices[0].x, gameState.slices[0].y);
-        for (let i = 1; i < gameState.slices.length; i++) {
-            let point = gameState.slices[i];
-            ctx.lineTo(point.x, point.y);
-        }
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "#00ffff";
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 10;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.stroke();
+        for (let i = 1; i < gameState.slices.length; i++) ctx.lineTo(gameState.slices[i].x, gameState.slices[i].y);
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
         ctx.shadowBlur = 0;
-        if (gameState.slices.length > 10) gameState.slices.shift();
+        if (gameState.slices.length > 8) gameState.slices.shift();
     }
 
     function updateUI() {
         scoreEl.innerText = gameState.score;
-        let livesStr = "";
-        for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
+        let livesStr = ""; for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
         livesEl.innerHTML = livesStr;
     }
 
@@ -482,19 +468,21 @@
         gameState.isPlaying = false;
         document.getElementById('final-score').innerText = gameState.score;
         gameOverScreen.style.display = "flex";
+        setTimeout(() => gameOverScreen.style.opacity = 1, 10);
     }
 
     window.startGame = initGame;
     window.resetGame = initGame;
 
-    // MediaPipe Setup
+    let cameraStarted = false;
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+    
     hands.onResults((results) => {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
-            const x = landmarks[8].x * canvas.width;
-            const y = landmarks[8].y * canvas.height;
+            const x = landmarks[8].x * window.W;
+            const y = landmarks[8].y * window.H;
             const dx = x - gameState.hand.prevX;
             const dy = y - gameState.hand.prevY;
             gameState.hand.speed = Math.sqrt(dx*dx + dy*dy);
@@ -515,7 +503,7 @@
         height: 720
     });
     
-    camera.start();
+    requestAnimationFrame(gameLoop);
 
 </script>
 </body>
