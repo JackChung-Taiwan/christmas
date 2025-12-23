@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕聽力忍者 - 極簡音效版</title>
+    <title>聖誕聽力忍者 - 軌道版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -132,7 +132,6 @@
     <div class="bg-pattern"></div>
     <video class="input_video"></video>
     <canvas class="output_canvas"></canvas>
-    
     <div id="missed-text">MISSED!</div>
 
     <div id="ui-layer">
@@ -147,7 +146,7 @@
 
     <div id="start-screen">
         <h1>🎧 聖誕聽力忍者</h1>
-        <p>1. 聽音切圖<br>2. 切對有切擊聲，切錯有敲桌聲<br>3. 漏接不會有聲音</p>
+        <p>1. 聽音切圖 (例如: "Santa")<br>2. 左右會飛出不同卡片<br>3. 切對加分，切錯扣分</p>
         <p style="font-size: 20px; color: #ccc;">(請開啟聲音並允許攝影機)</p>
         <button onclick="startGame()">START GAME</button>
     </div>
@@ -177,19 +176,14 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // --- 音效系統 (Web Audio API) ---
+    // --- 音效系統 ---
     let audioCtx = null;
-
     function initAudio() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
     }
 
-    // 1. 切對：切擊聲 (Clean Slice)
+    // 1. 切對：切擊聲
     function playSliceSound() {
         if (!audioCtx) return;
         const t = audioCtx.currentTime;
@@ -217,7 +211,7 @@
         osc.start();
     }
 
-    // 2. 切錯：敲桌聲 (Table Thud)
+    // 2. 切錯：敲桌聲
     function playTableSound() {
         if (!audioCtx) return;
         const t = audioCtx.currentTime;
@@ -251,8 +245,8 @@
         { word: 'Cake', icon: '🎂', color: '#ffccf2' }
     ];
 
-    const GRAVITY = 0.10; 
-    const THROW_FORCE = 12;
+    const GRAVITY = 0.12; 
+    const THROW_FORCE = 13;
     
     let gameState = {
         isPlaying: false,
@@ -277,31 +271,44 @@
         }
     }
 
+    // --- 遊戲物件 (包含位置邏輯) ---
     class GameObject {
-        constructor(forcedData = null) {
+        constructor(data, laneIndex, totalLanes) {
             this.active = true;
             this.radius = 110;
-            this.x = Math.random() * (canvas.width * 0.8) + (canvas.width * 0.1);
+            
+            // --- 絕對位置邏輯 (Lanes) ---
+            // laneIndex: 0 (左), 1 (中), 2 (右)
+            // 將畫面寬度均分，確保每張卡片有自己的軌道
+            
+            // 計算軌道中心點 (0.2, 0.5, 0.8)
+            // totalLanes 可能是 2 或 3
+            let laneWidth = canvas.width / totalLanes;
+            let startX = laneWidth * laneIndex + (laneWidth / 2);
+
+            // 加入一點點隨機偏移 (±5%)，讓它不要太死板，但不會重疊
+            let randomOffset = (Math.random() - 0.5) * (laneWidth * 0.2);
+            
+            this.x = startX + randomOffset;
             this.y = canvas.height + 150;
-            this.vx = (Math.random() - 0.5) * 4;
-            if (this.x < canvas.width/2 && this.vx < 0) this.vx *= -1;
-            if (this.x > canvas.width/2 && this.vx > 0) this.vx *= -1;
+
+            // --- 速度控制 ---
+            // 左邊的卡片稍微往右飄，右邊的往左飄，中間的直上
+            let drift = 0;
+            if (startX < canvas.width / 2) drift = 1.0; // 往右
+            else if (startX > canvas.width / 2) drift = -1.0; // 往左
+            
+            this.vx = drift + (Math.random() - 0.5) * 1; 
+            
             this.vy = -(Math.random() * 3 + THROW_FORCE);
             this.rotation = Math.random() * Math.PI * 2;
             this.rotationSpeed = (Math.random() - 0.5) * 0.05;
 
-            if (forcedData) {
-                this.icon = forcedData.icon;
-                this.word = forcedData.word;
-                this.color = forcedData.color;
-                this.isTarget = true;
-            } else {
-                const data = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
-                this.icon = data.icon;
-                this.word = data.word;
-                this.color = data.color;
-                this.isTarget = (this.word === gameState.targetWord);
-            }
+            // 資料設定
+            this.icon = data.icon;
+            this.word = data.word;
+            this.color = data.color;
+            this.isTarget = (this.word === gameState.targetWord);
         }
 
         update() {
@@ -387,30 +394,24 @@
         setTimeout(spawnWave, 1000);
     }
 
-    // 處理「切錯」 (有聲音)
     function triggerWrongFeedback() {
         gameState.lives--;
         gameState.score -= 5;
         if(gameState.score < 0) gameState.score = 0;
         updateUI();
-        playTableSound(); // 保留敲桌聲
+        playTableSound();
         if (gameState.lives <= 0) endGame();
     }
 
-    // 處理「漏接」 (無聲音)
     function triggerMissed() {
         gameState.lives--;
         gameState.score -= 5; 
         if(gameState.score < 0) gameState.score = 0;
         updateUI();
-        
-        // playTableSound(); <-- 這裡移除了聲音
-        
         missedTextEl.style.opacity = 1;
         setTimeout(() => {
             missedTextEl.style.opacity = 0;
         }, 800);
-
         if (gameState.lives <= 0) endGame();
     }
 
@@ -427,36 +428,53 @@
         livesEl.innerHTML = livesStr;
     }
 
+    // --- 核心：發射波 ---
     function spawnWave() {
         if(!gameState.isPlaying) return;
 
+        // 1. 決定題目
         const targetData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
         gameState.targetWord = targetData.word;
 
+        // 2. 播放語音 (只唸單字)
         targetDisplayEl.innerText = "👂 Listen...";
-        speak("Find... " + gameState.targetWord);
+        speak(gameState.targetWord); // 只唸單字，拿掉 Find...
         
         setTimeout(() => {
             if(gameState.isPlaying) targetDisplayEl.innerText = "Target: " + gameState.targetWord;
         }, 1500);
 
+        // 3. 準備卡片資料
+        // 一次固定出 3 張 (左、中、右)
         let totalCount = 3;
-        let targetIndex = Math.floor(Math.random() * totalCount);
+        let cardsToSpawn = [];
+        
+        // 放入目標卡
+        cardsToSpawn.push(targetData);
+        
+        // 放入其他干擾卡 (不重複)
+        while(cardsToSpawn.length < totalCount) {
+            let wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
+            // 檢查是否重複
+            let isDuplicate = cardsToSpawn.some(c => c.word === wrongData.word);
+            if (!isDuplicate) cardsToSpawn.push(wrongData);
+        }
 
+        // 隨機打亂這些卡片的位置 (Shuffle)
+        for (let i = cardsToSpawn.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cardsToSpawn[i], cardsToSpawn[j]] = [cardsToSpawn[j], cardsToSpawn[i]];
+        }
+
+        // 4. 生成物件 (指定軌道)
+        // 使用 i 作為 laneIndex (0, 1, 2)
         for(let i=0; i<totalCount; i++) {
+            // 每個物件生成時給予微小延遲，避免瞬間全部冒出來太嚇人
+            // 但因為軌道不同，其實同時出來也不會重疊
             setTimeout(() => {
                 if(!gameState.isPlaying) return;
-                
-                if (i === targetIndex) {
-                    gameState.objects.push(new GameObject(targetData));
-                } else {
-                    let wrongData;
-                    do {
-                        wrongData = VOCAB_DB[Math.floor(Math.random() * VOCAB_DB.length)];
-                    } while (wrongData.word === gameState.targetWord);
-                    gameState.objects.push(new GameObject(wrongData));
-                }
-            }, i * 300);
+                gameState.objects.push(new GameObject(cardsToSpawn[i], i, totalCount));
+            }, i * 200); 
         }
 
         setTimeout(spawnWave, 4000);
@@ -483,14 +501,12 @@
                 
                 if (dist < obj.radius && gameState.hand.speed > 3) {
                     if (obj.word === gameState.targetWord) {
-                        // 正確：切擊聲
                         gameState.score += 10;
                         playSliceSound(); 
                         createSliceEffect(obj, true);
                         gameState.objects.splice(i, 1);
                         updateUI();
                     } else {
-                        // 錯誤：敲桌聲
                         triggerWrongFeedback(); 
                         createSliceEffect(obj, false);
                         gameState.objects.splice(i, 1);
@@ -513,10 +529,7 @@
     function createSliceEffect(obj, isCorrect) {
         let color = isCorrect ? "#2ecc71" : "#e74c3c";
         let msg = isCorrect ? "YES!" : "WRONG!";
-        
-        for (let i = 0; i < 15; i++) {
-            gameState.particles.push(new Particle(obj.x, obj.y, color));
-        }
+        for (let i = 0; i < 15; i++) gameState.particles.push(new Particle(obj.x, obj.y, color));
         gameState.particles.push(new Particle(obj.x, obj.y, color, true, msg));
     }
 
@@ -539,7 +552,6 @@
         if (gameState.slices.length > 10) gameState.slices.shift();
     }
 
-    // --- MediaPipe ---
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
     hands.onResults((results) => {
@@ -569,7 +581,6 @@
     
     camera.start();
     gameLoop();
-
     window.startGame = initGame;
     window.resetGame = initGame;
 
