@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聖誕體感接禮物</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0f3854;
+            background: radial-gradient(ellipse at center,  #0a2e38  0%, #000000 70%);
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,255,0,0.2);
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        /* 隱藏原始視訊，我們只畫在 Canvas 上 */
+        .input_video {
+            display: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1); /* 鏡像翻轉，讓操作更直覺 */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #score-board {
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(180, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <video class="input_video"></video>
+    <canvas class="output_canvas" width="1280" height="720"></canvas>
+    
+    <div id="ui-layer">
+        <div id="score-board">🎄 分數: <span id="score">0</span> | 生命: <span id="lives">❤️❤️❤️</span></div>
+    </div>
+
+    <div id="loading">
+        🎅 正在啟動攝影機與 AI 模型...<br>請允許攝影機權限<br>(首次載入可能需要幾秒鐘)
+    </div>
+
+    <div id="game-over" class="game-over" onclick="restartGame()">
+        <h1>🎅 遊戲結束! 🎅</h1>
+        <h2 id="final-score">得分: 0</h2>
+        <p>點擊這裡重新開始</p>
+    </div>
+</div>
+
+<script>
+    const videoElement = document.getElementsByClassName('input_video')[0];
+    const canvasElement = document.getElementsByClassName('output_canvas')[0];
+    const canvasCtx = canvasElement.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const loadingEl = document.getElementById('loading');
+    const gameOverEl = document.getElementById('game-over');
+    const finalScoreEl = document.getElementById('final-score');
+
+    // 遊戲狀態
+    let gameState = {
+        score: 0,
+        lives: 3,
+        isPlaying: false,
+        handX: 0.5, // 0 到 1 之間
+        handY: 0.8,
+        items: [],
+        particles: []
+    };
+
+    // 遊戲參數
+    const SPAWN_RATE = 60; // 越小越快
+    let frameCount = 0;
+    const GRAVITY = 3; // 掉落速度基礎值
+
+    // 物品定義
+    const ITEM_TYPES = [
+        { type: 'gift', emoji: '🎁', score: 10, speed: 1.0, size: 50 },
+        { type: 'star', emoji: '⭐', score: 30, speed: 1.5, size: 40 },
+        { type: 'bomb', emoji: '💣', score: -10, speed: 1.2, damage: 1, size: 50 },
+        { type: 'snow', emoji: '❄️', score: 1, speed: 0.8, size: 30 }
+    ];
+
+    class Item {
+        constructor() {
+            // 隨機選擇物品，炸彈機率較低
+            let r = Math.random();
+            let typeIdx = 0;
+            if (r < 0.6) typeIdx = 0; // 60% 禮物
+            else if (r < 0.8) typeIdx = 3; // 20% 雪花
+            else if (r < 0.95) typeIdx = 2; // 15% 炸彈
+            else typeIdx = 1; // 5% 星星
+
+            this.data = ITEM_TYPES[typeIdx];
+            this.x = Math.random() * canvasElement.width;
+            this.y = -50;
+            this.speed = this.data.speed * (GRAVITY + Math.random());
+            this.rotation = Math.random() * Math.PI;
+        }
+
+        update() {
+            this.y += this.speed;
+            this.rotation += 0.05;
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.font = `${this.data.size}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(this.data.emoji, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    class Particle {
+        constructor(x, y, text) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 10;
+            this.vy = (Math.random() - 0.5) * 10;
+            this.life = 1.0;
+            this.text = text;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= 0.02;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.globalAlpha = this.life;
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "yellow";
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    // MediaPipe 初始化
+    const hands = new Hands({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }});
+
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720
+    });
+
+    // 當偵測到手部時
+    function onResults(results) {
+        // 清除畫布
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        // 如果還在載入中，隱藏載入提示並開始遊戲
+        if (loadingEl.style.display !== 'none') {
+            loadingEl.style.display = 'none';
+            if (!gameState.isPlaying && gameState.lives > 0) gameState.isPlaying = true;
+        }
+
+        // 繪製 Webcam 背景 (可選，這裡為了沉浸感我選擇只畫手和遊戲物件，保持黑色背景)
+        // canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+        // 處理手部位置
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            // 取得食指指尖 (Index Finger Tip, ID: 8)
+            // MediaPipe 座標是 0-1，需要轉換為 Canvas 尺寸
+            gameState.handX = landmarks[8].x * canvasElement.width;
+            gameState.handY = landmarks[8].y * canvasElement.height;
+            
+            drawPlayer(gameState.handX, gameState.handY);
+        } else {
+            // 如果沒偵測到手，顯示提示
+            canvasCtx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            canvasCtx.font = "20px Arial";
+            canvasCtx.textAlign = "center";
+            canvasCtx.fillText("請揮揮手...", canvasElement.width / 2, canvasElement.height / 2);
+        }
+
+        if (gameState.isPlaying) {
+            updateGame();
+        }
+    }
+
+    function drawPlayer(x, y) {
+        canvasCtx.font = "80px Arial";
+        canvasCtx.textAlign = "center";
+        canvasCtx.textBaseline = "middle";
+        // 繪製聖誕老人跟隨手部
+        canvasCtx.fillText("🎅", x, y);
+        
+        // 繪製除錯點(手指位置)
+        // canvasCtx.beginPath();
+        // canvasCtx.arc(x, y, 10, 0, 2 * Math.PI);
+        // canvasCtx.fillStyle = "red";
+        // canvasCtx.fill();
+    }
+
+    function updateGame() {
+        frameCount++;
+
+        // 生成物品
+        if (frameCount % SPAWN_RATE === 0) {
+            gameState.items.push(new Item());
+        }
+        
+        // 隨著分數增加難度
+        if(frameCount % 500 === 0 && SPAWN_RATE > 20) {
+            // SPAWN_RATE -= 5; // 可選：增加難度
+        }
+
+        // 更新與繪製物品
+        for (let i = gameState.items.length - 1; i >= 0; i--) {
+            let item = gameState.items[i];
+            item.update();
+            item.draw(canvasCtx);
+
+            // 碰撞檢測 (簡單距離公式)
+            let dist = Math.hypot(item.x - gameState.handX, item.y - gameState.handY);
+            
+            // 判定距離 (手的大小約為 60px 半徑)
+            if (dist < 60) {
+                handleCollision(item, i);
+            } else if (item.y > canvasElement.height) {
+                // 超出畫面移除
+                gameState.items.splice(i, 1);
+            }
+        }
+
+        // 更新特效
+        for (let i = gameState.particles.length - 1; i >= 0; i--) {
+            let p = gameState.particles[i];
+            p.update();
+            p.draw(canvasCtx);
+            if (p.life <= 0) gameState.particles.splice(i, 1);
+        }
+    }
+
+    function handleCollision(item, index) {
+        gameState.items.splice(index, 1); // 移除物品
+
+        if (item.data.type === 'bomb') {
+            gameState.lives -= item.data.damage;
+            gameState.particles.push(new Particle(gameState.handX, gameState.handY, "BOOM!"));
+            updateUI();
+            if (gameState.lives <= 0) endGame();
+        } else {
+            gameState.score += item.data.score;
+            gameState.particles.push(new Particle(gameState.handX, gameState.handY, "+" + item.data.score));
+            updateUI();
+        }
+    }
+
+    function updateUI() {
+        scoreEl.innerText = gameState.score;
+        let livesStr = "";
+        for(let i=0; i<gameState.lives; i++) livesStr += "❤️";
+        livesEl.innerText = livesStr;
+    }
+
+    function endGame() {
+        gameState.isPlaying = false;
+        finalScoreEl.innerText = "得分: " + gameState.score;
+        gameOverEl.style.display = "block";
+    }
+
+    window.restartGame = function() {
+        gameState.score = 0;
+        gameState.lives = 3;
+        gameState.items = [];
+        gameState.particles = [];
+        updateUI();
+        gameOverEl.style.display = "none";
+        gameState.isPlaying = true;
+    }
+
+    // 啟動攝影機
+    camera.start();
+
+</script>
+
+</body>
+</html>
