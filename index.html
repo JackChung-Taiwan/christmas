@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖誕聽力忍者 - 文字提示版</title>
+    <title>聖誕聽力忍者 - 極簡音效版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -110,7 +110,6 @@
         }
         button:hover { transform: scale(1.1); background: #27ae60; }
 
-        /* Missed 提示文字樣式 */
         #missed-text {
             position: absolute;
             top: 50%;
@@ -118,7 +117,7 @@
             transform: translate(-50%, -50%);
             font-size: 100px;
             font-weight: bold;
-            color: #e67e22; /* 橘色 */
+            color: #e67e22;
             text-shadow: 4px 4px 0 #000;
             opacity: 0;
             transition: opacity 0.2s;
@@ -148,7 +147,7 @@
 
     <div id="start-screen">
         <h1>🎧 聖誕聽力忍者</h1>
-        <p>1. 仔細聽題目<br>2. 沒切到會出現 "MISSED"<br>3. 切錯會出現 "WRONG"</p>
+        <p>1. 聽音切圖<br>2. 切對有切擊聲，切錯有敲桌聲<br>3. 漏接不會有聲音</p>
         <p style="font-size: 20px; color: #ccc;">(請開啟聲音並允許攝影機)</p>
         <button onclick="startGame()">START GAME</button>
     </div>
@@ -190,11 +189,10 @@
         }
     }
 
-    // 1. 切開聲 (清脆) - 正確
+    // 1. 切對：切擊聲 (Clean Slice)
     function playSliceSound() {
         if (!audioCtx) return;
         const t = audioCtx.currentTime;
-        // 噪音
         const bufferSize = audioCtx.sampleRate * 0.1;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -207,7 +205,7 @@
         noise.connect(noiseGain);
         noiseGain.connect(audioCtx.destination);
         noise.start();
-        // 輔助高頻
+        
         const osc = audioCtx.createOscillator();
         osc.frequency.setValueAtTime(800, t);
         osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
@@ -219,7 +217,7 @@
         osc.start();
     }
 
-    // 2. 敲桌聲 (沉悶) - 錯誤/錯過
+    // 2. 切錯：敲桌聲 (Table Thud)
     function playTableSound() {
         if (!audioCtx) return;
         const t = audioCtx.currentTime;
@@ -285,11 +283,9 @@
             this.radius = 110;
             this.x = Math.random() * (canvas.width * 0.8) + (canvas.width * 0.1);
             this.y = canvas.height + 150;
-            
             this.vx = (Math.random() - 0.5) * 4;
             if (this.x < canvas.width/2 && this.vx < 0) this.vx *= -1;
             if (this.x > canvas.width/2 && this.vx > 0) this.vx *= -1;
-
             this.vy = -(Math.random() * 3 + THROW_FORCE);
             this.rotation = Math.random() * Math.PI * 2;
             this.rotationSpeed = (Math.random() - 0.5) * 0.05;
@@ -314,11 +310,8 @@
             this.vy += GRAVITY;
             this.rotation += this.rotationSpeed;
             
-            // 掉出畫面檢測
             if (this.y > canvas.height + 200 && this.active) {
                 this.active = false;
-                
-                // 如果是正確答案掉出畫面 -> MISSED
                 if (this.isTarget && gameState.isPlaying) {
                     triggerMissed();
                 }
@@ -367,10 +360,8 @@
         draw() {
             ctx.save(); ctx.globalAlpha = this.life;
             if (this.isText) {
-                // 文字粒子大小
                 ctx.font = "900 60px Arial"; 
                 ctx.fillStyle = this.color; 
-                // 加個描邊讓文字更清楚
                 ctx.strokeStyle = "white";
                 ctx.lineWidth = 3;
                 ctx.strokeText(this.text, this.x, this.y);
@@ -396,25 +387,25 @@
         setTimeout(spawnWave, 1000);
     }
 
-    // 處理「切錯」(Wrong Cut)
+    // 處理「切錯」 (有聲音)
     function triggerWrongFeedback() {
         gameState.lives--;
         gameState.score -= 5;
         if(gameState.score < 0) gameState.score = 0;
         updateUI();
-        playTableSound();
+        playTableSound(); // 保留敲桌聲
         if (gameState.lives <= 0) endGame();
     }
 
-    // 處理「錯過」(Missed)
+    // 處理「漏接」 (無聲音)
     function triggerMissed() {
         gameState.lives--;
         gameState.score -= 5; 
         if(gameState.score < 0) gameState.score = 0;
         updateUI();
-        playTableSound();
-
-        // 顯示 MISSED 文字
+        
+        // playTableSound(); <-- 這裡移除了聲音
+        
         missedTextEl.style.opacity = 1;
         setTimeout(() => {
             missedTextEl.style.opacity = 0;
@@ -492,14 +483,14 @@
                 
                 if (dist < obj.radius && gameState.hand.speed > 3) {
                     if (obj.word === gameState.targetWord) {
-                        // 正確
+                        // 正確：切擊聲
                         gameState.score += 10;
-                        playSliceSound();
+                        playSliceSound(); 
                         createSliceEffect(obj, true);
                         gameState.objects.splice(i, 1);
                         updateUI();
                     } else {
-                        // 錯誤 (WRONG)
+                        // 錯誤：敲桌聲
                         triggerWrongFeedback(); 
                         createSliceEffect(obj, false);
                         gameState.objects.splice(i, 1);
@@ -520,13 +511,12 @@
     }
 
     function createSliceEffect(obj, isCorrect) {
-        let color = isCorrect ? "#2ecc71" : "#e74c3c"; // 綠 vs 紅
-        let msg = isCorrect ? "YES!" : "WRONG!"; // 文字變化
+        let color = isCorrect ? "#2ecc71" : "#e74c3c";
+        let msg = isCorrect ? "YES!" : "WRONG!";
         
         for (let i = 0; i < 15; i++) {
             gameState.particles.push(new Particle(obj.x, obj.y, color));
         }
-        // 產生文字粒子
         gameState.particles.push(new Particle(obj.x, obj.y, color, true, msg));
     }
 
