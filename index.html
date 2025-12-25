@@ -83,13 +83,12 @@
   /* 進度條容器 */
   #progress-container {
     position: absolute; 
-    /* --- 修正重點：大幅下移，避開邊框 --- */
-    top: 10vmin;  /* 原本是 10px，現在改用相對單位，約螢幕高度的 10% */
+    top: 10vmin;  
     left: 50%;
     transform: translateX(-50%);
     width: 60%; max-width: 400px;
     height: 30px;
-    background: rgba(0,0,0,0.6); /* 加深背景讓它在遊戲中更清楚 */
+    background: rgba(0,0,0,0.6); 
     border: 2px solid #fff;
     border-radius: 15px;
     overflow: hidden;
@@ -114,7 +113,7 @@
 
   /* 聽力提示 */
   #listen-hint {
-    position: absolute; top: 25%; /* 也稍微下移一點 */
+    position: absolute; top: 25%; 
     width: 100%;
     text-align: center; font-size: 15vmin; 
     color: #f1c40f; 
@@ -124,7 +123,20 @@
     pointer-events: none;
   }
   #listen-hint.show { display: block; opacity: 1; }
-  
+
+  /* 頁腳 */
+  #footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-size: 2vmin;
+    padding: 1vmin;
+    background-color: rgba(0, 0, 0, 0.5); /* 半透明背景 */
+    z-index: 30; /* 確保在最上層 */
+  }
+
   .hidden { display: none !important; }
 
   @media (min-width: 800px) {
@@ -133,8 +145,8 @@
     button { font-size: 1.8rem; }
     #listen-hint { font-size: 5rem; }
     .victory-text { font-size: 2.5rem; }
-    /* 電腦版可以稍微上面一點，因為邊框比例較小 */
     #progress-container { top: 80px; }
+    #footer { font-size: 1rem; padding: 10px; }
   }
 </style>
 </head>
@@ -162,6 +174,8 @@
     </div>
 
   </div>
+
+  <div id="footer">台灣兒童美語協會製作</div>
 
 <script>
 // --- 資料庫 ---
@@ -374,7 +388,7 @@ function draw() {
       saberTrail = []; 
   }
 
-  // 速度偵測 (防龜兵)
+  // 速度偵測
   let saberSpeed = dist(mouseX, mouseY, pmouseX, pmouseY);
   let isSlashing = saberSpeed > 5; 
 
@@ -399,6 +413,7 @@ function draw() {
   drawFeedback();
 }
 
+// --- 勝利處理函式 ---
 function triggerVictory() {
     isGameRunning = false;
     cards = []; 
