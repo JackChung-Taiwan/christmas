@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>聖誕光劍 (炫麗特效版)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>聖誕光劍 (響應式版)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
 <style>
@@ -12,7 +12,8 @@
     background-color: #0b1e10;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     user-select: none;
-    cursor: none; /* 隱藏滑鼠，由光劍取代 */
+    cursor: none; /* 隱藏滑鼠 */
+    touch-action: none; /* 禁止手機預設的捲動行為 */
   }
 
   /* UI 層 */
@@ -25,25 +26,28 @@
     z-index: 20;
   }
 
-  /* 開始面板 */
+  /* 響應式開始面板 */
   #start-overlay {
     background: linear-gradient(135deg, #c0392b, #8e44ad);
-    padding: 40px 60px; 
-    border-radius: 25px;
+    padding: 5vmin; /* 使用 vmin 讓間距隨螢幕縮放 */
+    border-radius: 20px;
     text-align: center; color: white;
-    border: 5px solid #f1c40f; 
+    border: 4px solid #f1c40f; 
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     pointer-events: auto;
+    width: 80%;
+    max-width: 500px; /* 電腦版最大寬度 */
     transition: transform 0.2s;
   }
   #start-overlay:hover { transform: scale(1.02); }
 
-  h1 { margin: 0 0 15px 0; font-size: 2.5rem; text-shadow: 2px 2px 0px #000; }
-  p { font-size: 1.2rem; margin-bottom: 25px; line-height: 1.6; }
+  h1 { margin: 0 0 10px 0; font-size: 6vmin; text-shadow: 2px 2px 0px #000; }
+  p { font-size: 3.5vmin; margin-bottom: 20px; line-height: 1.5; }
 
+  /* 響應式按鈕 */
   button {
-    padding: 15px 50px;
-    font-size: 1.8rem; 
+    padding: 15px 40px;
+    font-size: 4vmin; 
     background: #27ae60; 
     color: white; 
     border: 3px solid #f1c40f; 
@@ -51,15 +55,16 @@
     cursor: pointer; 
     font-weight: bold;
     box-shadow: 0 5px 0 #1e8449;
-    transition: all 0.1s;
+    white-space: nowrap;
   }
-  button:active { transform: translateY(5px); box-shadow: 0 0 0 #1e8449; }
+  button:active { transform: translateY(3px); box-shadow: none; }
 
   .hidden { display: none !important; }
 
+  /* 聽力提示 */
   #listen-hint {
     position: absolute; top: 15%; width: 100%;
-    text-align: center; font-size: 5rem; 
+    text-align: center; font-size: 15vmin; /* 超大字 */
     color: #f1c40f; 
     font-weight: 900; 
     text-shadow: 4px 4px 0px #c0392b; 
@@ -68,6 +73,14 @@
     z-index: 10;
   }
   #listen-hint.show { display: block; opacity: 1; }
+  
+  /* 手機版字體微調 */
+  @media (min-width: 800px) {
+    h1 { font-size: 2.5rem; }
+    p { font-size: 1.2rem; }
+    button { font-size: 1.5rem; }
+    #listen-hint { font-size: 5rem; }
+  }
 </style>
 </head>
 <body>
@@ -77,13 +90,13 @@
   <div id="ui-layer">
     <div id="start-overlay">
       <h1>🎄 Christmas Saber</h1>
-      <p>1. 仔細聽英文單字<br>2. 卡片會<b>慢慢飛</b>向螢幕上方<br>3. 滑動滑鼠切開正確的卡片！</p>
+      <p>1. 聽英文單字<br>2. 卡片會慢慢飛出<br>3. 滑動手指/滑鼠切開它！</p>
       <button onclick="startGame()">Start 🎅</button>
     </div>
   </div>
 
 <script>
-// --- 資料庫 (20個單字) ---
+// --- 資料庫 ---
 const gameData = [
     { word: "Santa", icon: "🎅", color: "#c0392b" },
     { word: "Tree", icon: "🎄", color: "#27ae60" },
@@ -110,6 +123,7 @@ const gameData = [
 const phrasesCorrect = ["Awesome!", "Perfect!", "Excellent!", "Great Job!", "Fantastic!", "You Rock!"];
 const phrasesWrong = ["Try Again!", "Don't Give Up!", "Keep Going!", "Nice Try!", "Almost There!", "You Can Do It!"];
 
+// --- 變數 ---
 let isGameRunning = false;
 let score = 0;
 let cards = [];
@@ -118,10 +132,19 @@ let saberTrail = [];
 let snowFlakes = []; 
 let synth = window.speechSynthesis;
 let currentTargetWord = "";
-
 const SPEECH_RATE = 0.85; 
 
-// 鼓勵特效變數
+// --- 響應式尺寸變數 (會在 setup 和 windowResized 計算) ---
+let R = {
+    cardSize: 0,
+    emojiSize: 0,
+    textSize: 0,
+    borderW: 0,
+    feedbackSize: 0,
+    scoreSize: 0
+};
+
+// 鼓勵特效
 let feedback = { text: "", life: 0, y: 0, scale: 1 };
 
 function setup() {
@@ -129,6 +152,8 @@ function setup() {
   textAlign(CENTER, CENTER);
   rectMode(CENTER);
   
+  calculateResponsiveSizes(); // 計算尺寸
+
   // 背景雪花
   for(let i=0; i<60; i++) {
     snowFlakes.push({
@@ -140,6 +165,23 @@ function setup() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  calculateResponsiveSizes(); // 視窗改變時重新計算
+}
+
+// *** 核心：響應式尺寸計算函式 ***
+function calculateResponsiveSizes() {
+    // 基準尺寸：取螢幕較短邊的比例，確保在手機直屏也能顯示完整
+    let minDim = min(width, height);
+    
+    // 卡片大小：最小 100px，最大 180px，通常佔螢幕短邊的 22%
+    R.cardSize = constrain(minDim * 0.22, 100, 180);
+    
+    R.emojiSize = R.cardSize * 0.6; // Emoji 佔卡片的 60%
+    R.textSize = R.cardSize * 0.2;  // 文字佔卡片的 20%
+    
+    R.borderW = minDim * 0.04; // 邊框寬度
+    R.feedbackSize = minDim * 0.15; // 鼓勵語大小
+    R.scoreSize = minDim * 0.08; // 分數大小
 }
 
 function startGame() {
@@ -175,6 +217,7 @@ function spawnCards(target, distractor) {
   let items = [target, distractor];
   if (random() > 0.5) items.reverse();
 
+  // 使用相對位置 (百分比)
   let startLeft = { x: width * 0.15, y: height + 50 };
   let startRight = { x: width * 0.85, y: height + 50 };
   let targetLeft = { x: width * 0.4, y: height * 0.2 };
@@ -195,7 +238,7 @@ function launchCard(startX, startY, destX, destY, data, isTarget) {
         x: startX, y: startY,
         vx: vx, vy: vy,
         gravity: gravity,
-        size: 150,
+        size: R.cardSize, // 使用動態計算的大小
         angle: 0, rotSpeed: random(-0.01, 0.01), 
         data: data, isTarget: isTarget,
         draw: function() {
@@ -204,9 +247,10 @@ function launchCard(startX, startY, destX, destY, data, isTarget) {
             fill(255); 
             stroke(isTarget ? "#c0392b" : "#2c3e50"); 
             strokeWeight(5);
+            // 使用動態大小繪製
             rect(0, 0, this.size, this.size * 1.3, 20);
-            textSize(90); noStroke(); text(this.data.icon, 0, -20);
-            fill(0); textSize(30); textStyle(BOLD); text(this.data.word, 0, 55);
+            textSize(R.emojiSize); noStroke(); text(this.data.icon, 0, -this.size*0.15);
+            fill(0); textSize(R.textSize); textStyle(BOLD); text(this.data.word, 0, this.size*0.4);
             pop();
         },
         update: function() {
@@ -225,18 +269,17 @@ function draw() {
 
   if(!isGameRunning) return;
 
-  // 1. 光劍更新 (滑鼠控制)
   updateSaber(mouseX, mouseY);
   drawSaberOptimized();
 
-  // 2. 卡片邏輯
   for (let i = cards.length - 1; i >= 0; i--) {
     let c = cards[i];
     if (!c) continue; 
     c.update();
     c.draw();
 
-    if (dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 30) {
+    // 碰撞偵測 (根據動態大小調整判定範圍)
+    if (dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 20) {
         handleHit(c, i);
         break; 
     } 
@@ -246,26 +289,20 @@ function draw() {
     }
   }
 
-  // 3. 粒子特效
   drawParticles();
-  
-  // 4. 文字回饋
   drawFeedback();
 
-  // 5. 分數
-  fill(255); textSize(36); textStyle(BOLD); noStroke();
+  fill(255); textSize(R.scoreSize); textStyle(BOLD); noStroke();
   textAlign(LEFT, TOP);
-  text("Score: " + score, 60, 60);
+  // 分數位置也隨邊框寬度調整，避免被遮住
+  text("Score: " + score, R.borderW + 20, R.borderW + 20);
   textAlign(CENTER, CENTER);
 }
 
-// --- 全新升級的粒子系統 ---
 function createExplosion(x, y, colorHex) {
-  // 1. 產生卡片顏色的碎屑 (Confetti)
   for (let i = 0; i < 30; i++) {
     particles.push(new Particle(x, y, colorHex, 'debris'));
   }
-  // 2. 產生金色的魔法火花 (Sparkle)
   for (let i = 0; i < 20; i++) {
     particles.push(new Particle(x, y, '#ffd700', 'sparkle'));
   }
@@ -273,57 +310,30 @@ function createExplosion(x, y, colorHex) {
 
 class Particle {
     constructor(x, y, col, type) {
-        this.x = x;
-        this.y = y;
-        this.col = col;
-        this.type = type;
-        
+        this.x = x; this.y = y; this.col = col; this.type = type;
         let angle = random(TWO_PI);
-        let speed = random(2, 12); // 爆炸速度更快
+        let speed = random(min(width,height)*0.01, min(width,height)*0.03); // 速度也隨螢幕大小微調
         this.vx = cos(angle) * speed;
         this.vy = sin(angle) * speed;
-        
         this.life = 255;
-        this.gravity = 0.4; // 重力感
-        this.friction = 0.94; // 空氣阻力
-        
-        this.size = type === 'debris' ? random(8, 16) : random(3, 8);
-        this.rot = random(TWO_PI);
-        this.rotSpeed = random(-0.3, 0.3);
+        this.gravity = 0.4;
+        this.friction = 0.94;
+        // 粒子大小也響應式
+        let baseScale = min(width, height) / 800;
+        this.size = (type === 'debris' ? random(8, 16) : random(3, 8)) * baseScale;
+        this.rot = random(TWO_PI); this.rotSpeed = random(-0.3, 0.3);
     }
-    
     update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.vy += this.gravity;
-        this.vx *= this.friction;
-        this.vy *= this.friction;
-        
-        this.life -= this.type === 'debris' ? 5 : 8; // 碎屑消失慢，火花消失快
-        this.rot += this.rotSpeed;
-        this.size *= 0.96; // 慢慢縮小
+        this.x += this.vx; this.y += this.vy; this.vy += this.gravity;
+        this.vx *= this.friction; this.vy *= this.friction;
+        this.life -= this.type === 'debris' ? 5 : 8;
+        this.rot += this.rotSpeed; this.size *= 0.96;
     }
-    
     draw() {
-        push();
-        translate(this.x, this.y);
-        rotate(this.rot);
-        noStroke();
-        
-        // 設定顏色
-        let c = color(this.col);
-        c.setAlpha(this.life);
-        fill(c);
-
-        if (this.type === 'debris') {
-            // 碎屑是方形的
-            rect(0, 0, this.size, this.size);
-        } else {
-            // 火花是發光的
-            blendMode(ADD);
-            circle(0, 0, this.size);
-            blendMode(BLEND);
-        }
+        push(); translate(this.x, this.y); rotate(this.rot); noStroke();
+        let c = color(this.col); c.setAlpha(this.life); fill(c);
+        if (this.type === 'debris') rect(0, 0, this.size, this.size);
+        else { blendMode(ADD); circle(0, 0, this.size); blendMode(BLEND); }
         pop();
     }
 }
@@ -331,22 +341,14 @@ class Particle {
 function drawParticles() {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
-    p.update();
-    p.draw();
+    p.update(); p.draw();
     if (p.life <= 0) particles.splice(i, 1);
   }
 }
 
-// --- 鼓勵語特效 ---
 function triggerFeedback(isCorrect) {
-    if (isCorrect) {
-        feedback.text = random(phrasesCorrect);
-    } else {
-        feedback.text = random(phrasesWrong);
-    }
-    feedback.life = 255;
-    feedback.y = height / 2;
-    feedback.scale = 0.5;
+    feedback.text = isCorrect ? random(phrasesCorrect) : random(phrasesWrong);
+    feedback.life = 255; feedback.y = height / 2; feedback.scale = 0.5;
 }
 
 function drawFeedback() {
@@ -354,23 +356,16 @@ function drawFeedback() {
         push();
         translate(width / 2, feedback.y);
         scale(feedback.scale);
-        
         let goldColor = color(255, 215, 0, feedback.life);
-        drawingContext.shadowBlur = 40; // 光暈更強
-        drawingContext.shadowColor = 'rgba(255, 215, 0, 0.8)';
+        drawingContext.shadowBlur = 40; drawingContext.shadowColor = 'rgba(255, 215, 0, 0.8)';
+        fill(goldColor); stroke(255, feedback.life); strokeWeight(3);
         
-        fill(goldColor);
-        stroke(255, feedback.life);
-        strokeWeight(3);
+        // 字體大小使用響應式變數
+        textSize(R.feedbackSize); 
+        textStyle(BOLD); text(feedback.text, 0, 0);
         
-        textSize(90);
-        textStyle(BOLD);
-        text(feedback.text, 0, 0);
-        
-        feedback.life -= 4;
-        feedback.y -= 1.5; // 上升速度
+        feedback.life -= 4; feedback.y -= 1.5;
         if(feedback.scale < 1.2) feedback.scale += 0.05;
-        
         drawingContext.shadowBlur = 0;
         pop();
     }
@@ -378,49 +373,36 @@ function drawFeedback() {
 
 function handleHit(card, index) {
   cards.splice(index, 1);
-  // 觸發大爆炸特效
   createExplosion(card.x, card.y, card.data.color);
-
   if (card.isTarget) {
     score += 10;
     triggerFeedback(true);
     speak(feedback.text, null, SPEECH_RATE);
-    cards = []; 
-    setTimeout(startRound, 1200);
+    cards = []; setTimeout(startRound, 1200);
   } else {
     triggerFeedback(false);
     speak(feedback.text, null, SPEECH_RATE);
-    cards = [];
-    setTimeout(startRound, 1200);
+    cards = []; setTimeout(startRound, 1200);
   }
 }
 
 function drawChristmasBorder() {
-  push();
-  rectMode(CORNER); 
-  noStroke();
-  let borderW = 30; 
-  let stripeLen = 40; 
-  let redC = color('#c0392b');
-  let greenC = color('#27ae60');
+  push(); rectMode(CORNER); noStroke();
+  let borderW = R.borderW; // 使用響應式寬度
+  let stripeLen = borderW * 1.5; 
+  let redC = color('#c0392b'); let greenC = color('#27ae60');
 
+  // 四邊繪製
   for(let x = 0; x < width; x += stripeLen) {
-    fill((x / stripeLen) % 2 === 0 ? redC : greenC);
-    rect(x, 0, stripeLen, borderW);
-  }
-  for(let x = 0; x < width; x += stripeLen) {
-    fill((x / stripeLen) % 2 !== 0 ? redC : greenC); 
-    rect(x, height - borderW, stripeLen, borderW);
+    fill((x / stripeLen) % 2 === 0 ? redC : greenC); rect(x, 0, stripeLen, borderW);
+    fill((x / stripeLen) % 2 !== 0 ? redC : greenC); rect(x, height - borderW, stripeLen, borderW);
   }
   for(let y = borderW; y < height - borderW; y += stripeLen) {
-    fill((y / stripeLen) % 2 === 0 ? redC : greenC);
-    rect(0, y, borderW, stripeLen);
+    fill((y / stripeLen) % 2 === 0 ? redC : greenC); rect(0, y, borderW, stripeLen);
+    fill((y / stripeLen) % 2 !== 0 ? redC : greenC); rect(width - borderW, y, borderW, stripeLen);
   }
-  for(let y = borderW; y < height - borderW; y += stripeLen) {
-    fill((y / stripeLen) % 2 !== 0 ? redC : greenC); 
-    rect(width - borderW, y, borderW, stripeLen);
-  }
-
+  
+  // 畫角落方塊
   fill(redC); rect(0,0,borderW,borderW);
   fill(greenC); rect(width-borderW,0,borderW,borderW);
   fill(greenC); rect(0,height-borderW,borderW,borderW);
@@ -440,13 +422,10 @@ function drawSaberOptimized() {
   if (saberTrail.length < 2) return;
   blendMode(ADD); 
   noFill(); strokeCap(ROUND); strokeJoin(ROUND);
-
   stroke(255, 0, 0, 100); strokeWeight(25);
   beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
-
   stroke(255, 50, 50, 200); strokeWeight(15);
   beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
-
   stroke(255, 255, 255, 255); strokeWeight(5);
   beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
   blendMode(BLEND); 
@@ -474,8 +453,7 @@ function setGradient(x, y, w, h, c1, c2) {
 function speak(text, callback, rate = 1.0) {
   synth.cancel();
   let u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US'; 
-  u.rate = rate; 
+  u.lang = 'en-US'; u.rate = rate; 
   if(callback) u.onend = callback;
   synth.speak(u);
 }
