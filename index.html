@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聖誕光劍 (最終排版修正版)</title>
+<title>聖誕光劍 (協會字體加大版)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
 <style>
@@ -124,17 +124,20 @@
   }
   #listen-hint.show { display: block; opacity: 1; }
 
-  /* 頁腳 */
+  /* --- 頁腳設定 (字體已加大) --- */
   #footer {
     position: absolute;
     bottom: 0;
     width: 100%;
     text-align: center;
     color: white;
-    font-size: 2vmin;
-    padding: 1vmin;
-    background-color: rgba(0, 0, 0, 0.5); /* 半透明背景 */
-    z-index: 30; /* 確保在最上層 */
+    font-size: 4.5vmin; /* 手機版字體加大 */
+    font-weight: bold;  /* 加粗 */
+    padding: 1.5vmin;
+    background-color: rgba(0, 0, 0, 0.6); /* 背景稍微加深 */
+    z-index: 30; 
+    letter-spacing: 1px; /* 增加字距讓閱讀更舒適 */
+    text-shadow: 1px 1px 2px black;
   }
 
   .hidden { display: none !important; }
@@ -146,7 +149,8 @@
     #listen-hint { font-size: 5rem; }
     .victory-text { font-size: 2.5rem; }
     #progress-container { top: 80px; }
-    #footer { font-size: 1rem; padding: 10px; }
+    /* 電腦版字體設定 */
+    #footer { font-size: 1.5rem; padding: 15px; }
   }
 </style>
 </head>
