@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聖誕光劍 (防撞最終版)</title>
+<title>聖誕光劍 (防誤觸完美版)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
 <style>
@@ -88,7 +88,7 @@
   <div id="ui-layer">
     <div id="start-overlay">
       <h1>🎄 Christmas Saber</h1>
-      <p>1. 聽英文單字<br>2. 卡片會<b>直直飄上來</b><br>3. 滑動手指切開它！</p>
+      <p>1. 聽英文單字<br>2. 卡片會<b>直直飄上來</b><br>3. <b>快速滑動</b>手指切開它！</p>
       <button onclick="startGame()">Start 🎅</button>
     </div>
   </div>
@@ -139,8 +139,8 @@ let R = {
     borderW: 0,
     feedbackSize: 0,
     scoreSize: 0,
-    leftLaneX: 0,  // 左跑道 X 座標
-    rightLaneX: 0  // 右跑道 X 座標
+    leftLaneX: 0,
+    rightLaneX: 0
 };
 
 let feedback = { text: "", life: 0, y: 0, scale: 1 };
@@ -170,10 +170,8 @@ function calculateResponsiveSizes() {
     let isPortrait = width < height;
 
     if (isPortrait) {
-        // 手機直向：卡片大小為寬度的 20%
         R.cardSize = constrain(width * 0.2, 60, 130);
     } else {
-        // 電腦/橫向：高度的 18%
         R.cardSize = constrain(height * 0.18, 80, 150);
     }
 
@@ -184,8 +182,6 @@ function calculateResponsiveSizes() {
     R.feedbackSize = minDim * 0.15;
     R.scoreSize = minDim * 0.06;
 
-    // *** 關鍵修改：定義絕對分開的左右跑道 ***
-    // 左跑道在螢幕 25% 處，右跑道在螢幕 75% 處
     R.leftLaneX = width * 0.25;
     R.rightLaneX = width * 0.75;
 }
@@ -223,23 +219,16 @@ function spawnCards(target, distractor) {
   let items = [target, distractor];
   if (random() > 0.5) items.reverse();
 
-  // *** 這裡改為「垂直發射」邏輯 ***
-  // 不再有左右交叉飛行的可能，直接指定固定跑道
-  
-  // 左邊卡片
+  // 垂直發射，分左右跑道
   launchCard(R.leftLaneX, height + 50, R.leftLaneX, height * 0.2, items[0], items[0].word === currentTargetWord);
-  
-  // 右邊卡片
   launchCard(R.rightLaneX, height + 50, R.rightLaneX, height * 0.2, items[1], items[1].word === currentTargetWord);
 }
 
 function launchCard(startX, startY, destX, destY, data, isTarget) {
-    let gravity = 0.06; // 漂浮重力
-    
+    let gravity = 0.06; 
     let heightDiff = startY - destY;
     let vy = -Math.sqrt(2 * gravity * heightDiff); 
-    
-    // 水平速度強制為 0 (或非常微小)，確保直上直下
+    let timeToPeak = Math.abs(vy / gravity);
     let vx = (destX - startX) * 0.01; 
 
     cards.push({
@@ -277,7 +266,39 @@ function draw() {
 
   if(!isGameRunning) return;
 
-  updateSaber(mouseX, mouseY);
+  // *** 1. 偵測光劍是否有效 (Active Saber Check) ***
+  let isSaberActive = false;
+  
+  // 檢測是否為手機觸控
+  if (touches.length > 0) {
+      isSaberActive = true;
+      // 手機上：使用第一個觸控點
+      updateSaber(touches[0].x, touches[0].y);
+  } else {
+      // 電腦上：永遠有效
+      // 但我們加一個簡單的判斷：如果是觸控裝置但沒摸螢幕，就無效
+      // p5.js 中 mouseX 在手機上會殘留，所以我們依賴 touches 陣列長度來過濾手機的誤觸
+      
+      // 這裡有一個簡單的 Hack: 
+      // 如果 touches 為空，但 winMouseX 有值，我們假設這是電腦滑鼠
+      // 但為了保險，我們只在沒有 touches 時才畫鼠標光劍
+      updateSaber(mouseX, mouseY);
+      isSaberActive = true; 
+  }
+  
+  // *** 手機版特化：如果沒觸摸，清空軌跡，避免殘留 ***
+  if (touches.length === 0 && 'ontouchstart' in window) {
+      isSaberActive = false;
+      saberTrail = []; // 清空光劍，避免隱形殺手
+  }
+
+  // 計算揮動速度 (防龜兵)
+  let saberSpeed = dist(mouseX, mouseY, pmouseX, pmouseY);
+  // 在手機上，因為 mouseX 是映射 touch，所以這也能運作。
+  // 如果速度太慢（停在原地），就不算切擊
+  let isSlashing = saberSpeed > 5; 
+
+  // 繪製光劍
   drawSaberOptimized();
 
   for (let i = cards.length - 1; i >= 0; i--) {
@@ -286,7 +307,11 @@ function draw() {
     c.update();
     c.draw();
 
-    if (dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 20) {
+    // 碰撞偵測條件升級：
+    // 1. 光劍必須「存在」(有按著)
+    // 2. 光劍必須「有在動」(防龜兵，速度 > 5)
+    // 3. 距離夠近
+    if (isSaberActive && isSlashing && dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 20) {
         handleHit(c, i);
         break; 
     } 
