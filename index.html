@@ -1,525 +1,484 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <title>🎄 Christmas Word Saber - 體感切單字</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
-    
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聖誕光劍 (炫麗特效版)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
-    <style>
-        body {
-            margin: 0;
-            background: radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d); /* 聖誕夜漸層背景 */
-            background-color: #0d0d2b;
-            overflow: hidden;
-            font-family: 'Fredoka One', cursive; /* 使用圓潤字體 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+<style>
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background-color: #0b1e10;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    user-select: none;
+    cursor: none; /* 隱藏滑鼠，由光劍取代 */
+  }
 
-        .input_video { display: none; }
+  /* UI 層 */
+  #ui-layer {
+    position: absolute; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    z-index: 20;
+  }
 
-        .output_canvas {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            transform: scaleX(-1);
-        }
+  /* 開始面板 */
+  #start-overlay {
+    background: linear-gradient(135deg, #c0392b, #8e44ad);
+    padding: 40px 60px; 
+    border-radius: 25px;
+    text-align: center; color: white;
+    border: 5px solid #f1c40f; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    pointer-events: auto;
+    transition: transform 0.2s;
+  }
+  #start-overlay:hover { transform: scale(1.02); }
 
-        /* 增加一個背景層放雪花，不翻轉 */
-        #bg-canvas {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
+  h1 { margin: 0 0 15px 0; font-size: 2.5rem; text-shadow: 2px 2px 0px #000; }
+  p { font-size: 1.2rem; margin-bottom: 25px; line-height: 1.6; }
 
-        #ui-layer {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 3;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
+  button {
+    padding: 15px 50px;
+    font-size: 1.8rem; 
+    background: #27ae60; 
+    color: white; 
+    border: 3px solid #f1c40f; 
+    border-radius: 50px;
+    cursor: pointer; 
+    font-weight: bold;
+    box-shadow: 0 5px 0 #1e8449;
+    transition: all 0.1s;
+  }
+  button:active { transform: translateY(5px); box-shadow: 0 0 0 #1e8449; }
 
-        #score-board {
-            font-size: 48px;
-            margin-top: 20px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 10px 30px;
-            border-radius: 50px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            backdrop-filter: blur(5px);
-        }
+  .hidden { display: none !important; }
 
-        #score { color: #ffe600; }
-
-        #loading, #start-screen {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 50px;
-            border-radius: 30px;
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
-            pointer-events: auto;
-            max-width: 80%;
-        }
-
-        #loading { z-index: 10; }
-        
-        h1 { margin: 0 0 20px 0; color: #fff; font-size: 3rem; }
-        p { font-size: 1.2rem; color: #ddd; }
-        
-        button {
-            padding: 15px 40px;
-            font-size: 28px;
-            font-family: 'Fredoka One', cursive;
-            background: linear-gradient(to bottom, #ff4444, #cc0000);
-            color: white;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            margin-top: 30px;
-            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
-            transition: transform 0.1s, box-shadow 0.1s;
-        }
-        button:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(255, 0, 0, 0.6); }
-        button:active { transform: scale(0.95); }
-        .hidden { display: none !important; }
-
-    </style>
+  #listen-hint {
+    position: absolute; top: 15%; width: 100%;
+    text-align: center; font-size: 5rem; 
+    color: #f1c40f; 
+    font-weight: 900; 
+    text-shadow: 4px 4px 0px #c0392b; 
+    display: none; opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #listen-hint.show { display: block; opacity: 1; }
+</style>
 </head>
 <body>
-    <video class="input_video"></video>
-    <canvas id="bg-canvas"></canvas>
-    <canvas class="output_canvas"></canvas>
 
-    <div id="ui-layer">
-        <div id="score-board">SCORE: <span id="score">0</span></div>
-        
-        <div id="loading">
-            <h1>📷 攝影機啟動中...</h1>
-            <p>請允許權限，準備好你的雙手！</p>
-        </div>
+  <div id="listen-hint">🔊 Listen!</div>
 
-        <div id="start-screen" class="hidden">
-            <h1>🎄 Christmas Saber</h1>
-            <p>揮動你的食指變成光劍！</p>
-            <p>看到方塊飛過來就切下去！</p>
-            <button onclick="startGame()">START GAME</button>
-        </div>
+  <div id="ui-layer">
+    <div id="start-overlay">
+      <h1>🎄 Christmas Saber</h1>
+      <p>1. 仔細聽英文單字<br>2. 卡片會<b>慢慢飛</b>向螢幕上方<br>3. 滑動滑鼠切開正確的卡片！</p>
+      <button onclick="startGame()">Start 🎅</button>
     </div>
+  </div>
 
 <script>
-    const videoElement = document.getElementsByClassName('input_video')[0];
-    const canvasElement = document.getElementsByClassName('output_canvas')[0];
-    const bgCanvasElement = document.getElementById('bg-canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const bgCtx = bgCanvasElement.getContext('2d');
-    const scoreElement = document.getElementById('score');
-    const loadingScreen = document.getElementById('loading');
-    const startScreen = document.getElementById('start-screen');
+// --- 資料庫 (20個單字) ---
+const gameData = [
+    { word: "Santa", icon: "🎅", color: "#c0392b" },
+    { word: "Tree", icon: "🎄", color: "#27ae60" },
+    { word: "Gift", icon: "🎁", color: "#f1c40f" },
+    { word: "Snowman", icon: "⛄", color: "#3498db" },
+    { word: "Star", icon: "⭐", color: "#f1c40f" },
+    { word: "Bell", icon: "🔔", color: "#e67e22" },
+    { word: "Cookie", icon: "🍪", color: "#8d6e63" },
+    { word: "Candy", icon: "🍬", color: "#e91e63" },
+    { word: "Sock", icon: "🧦", color: "#c0392b" },
+    { word: "Angel", icon: "👼", color: "#f39c12" },
+    { word: "Reindeer", icon: "🦌", color: "#8d6e63" },
+    { word: "Sleigh", icon: "🛷", color: "#c0392b" },
+    { word: "Elf", icon: "🧝", color: "#27ae60" },
+    { word: "Snowflake", icon: "❄️", color: "#a2d9ff" },
+    { word: "Candle", icon: "🕯️", color: "#f39c12" },
+    { word: "Turkey", icon: "🦃", color: "#d35400" },
+    { word: "Ribbon", icon: "🎀", color: "#e91e63" },
+    { word: "Gloves", icon: "🧤", color: "#16a085" },
+    { word: "Scarf", icon: "🧣", color: "#e74c3c" },
+    { word: "Toy", icon: "🧸", color: "#9b59b6" }
+];
 
-    let gameState = 'LOADING'; 
-    let score = 0;
-    let handLandmarksMap = [];
-    
-    // 音效環境
-    let audioCtx;
+const phrasesCorrect = ["Awesome!", "Perfect!", "Excellent!", "Great Job!", "Fantastic!", "You Rock!"];
+const phrasesWrong = ["Try Again!", "Don't Give Up!", "Keep Going!", "Nice Try!", "Almost There!", "You Can Do It!"];
 
-    // 聖誕單字庫
-    const christmasWords = [
-        "Santa", "Gift", "Tree", "Star", "Snow", 
-        "Bell", "Elf", "Candy", "Deer", "Sleigh",
-        "Merry", "Xmas", "Joy", "Love", "Noel", "HoHoHo"
-    ];
+let isGameRunning = false;
+let score = 0;
+let cards = [];
+let particles = [];
+let saberTrail = [];
+let snowFlakes = []; 
+let synth = window.speechSynthesis;
+let currentTargetWord = "";
 
-    // 調整畫布大小
-    function resizeCanvas() {
-        canvasElement.width = window.innerWidth;
-        canvasElement.height = window.innerHeight;
-        bgCanvasElement.width = window.innerWidth;
-        bgCanvasElement.height = window.innerHeight;
-    }
-    window.onresize = resizeCanvas;
-    resizeCanvas();
+const SPEECH_RATE = 0.85; 
 
-    // ==========================================
-    // 音效生成器 (不需外部檔案)
-    // ==========================================
-    function initAudio() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-    }
+// 鼓勵特效變數
+let feedback = { text: "", life: 0, y: 0, scale: 1 };
 
-    function playSound(type) {
-        if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        const now = audioCtx.currentTime;
-
-        if (type === 'hit') {
-            // 清脆的叮聲
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(800, now);
-            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-            gainNode.gain.setValueAtTime(0.3, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            osc.start(now);
-            osc.stop(now + 0.3);
-        } else if (type === 'swoosh') {
-            // 揮舞的低頻噪音 (模擬)
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(100, now);
-            osc.frequency.linearRampToValueAtTime(50, now + 0.1);
-            gainNode.gain.setValueAtTime(0.05, now);
-            gainNode.gain.linearRampToValueAtTime(0.01, now + 0.1);
-            osc.start(now);
-            osc.stop(now + 0.1);
-        }
-    }
-
-    // ==========================================
-    // MediaPipe Hands
-    // ==========================================
-    function onResults(results) {
-        handLandmarksMap = results.multiHandLandmarks;
-        if (gameState === 'LOADING' && handLandmarksMap.length > 0) {
-            gameState = 'READY';
-            loadingScreen.classList.add('hidden');
-            startScreen.classList.remove('hidden');
-        }
-    }
-
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textAlign(CENTER, CENTER);
+  rectMode(CENTER);
+  
+  // 背景雪花
+  for(let i=0; i<60; i++) {
+    snowFlakes.push({
+      x: random(width), y: random(height),
+      size: random(2, 6), speed: random(0.5, 2.5)
     });
-    hands.onResults(onResults);
+  }
+}
 
-    const camera = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
-        width: 640,
-        height: 480
-    });
-    camera.start();
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
 
-    // ==========================================
-    // 遊戲物件類別
-    // ==========================================
-    const FOCAL_LENGTH = 400;
-    const SPAWN_Z = 1500;
-    const HIT_Z = 150; 
-    const DISAPPEAR_Z = -200;
+function startGame() {
+  document.getElementById('start-overlay').classList.add('hidden');
+  if(synth) synth.speak(new SpeechSynthesisUtterance("")); 
+  isGameRunning = true;
+  score = 0;
+  setTimeout(startRound, 800);
+}
 
-    function project3D(x, y, z) {
-        const scale = FOCAL_LENGTH / (FOCAL_LENGTH + z);
-        const canvasX = (canvasElement.width / 2) + (x * scale);
-        const canvasY = (canvasElement.height / 2) + (y * scale);
-        return { x: canvasX, y: canvasY, scale: scale };
-    }
+function startRound() {
+  if(!isGameRunning) return;
 
-    class WordBlock {
-        constructor() {
-            this.word = christmasWords[Math.floor(Math.random() * christmasWords.length)];
-            this.worldX = (Math.random() - 0.5) * canvasElement.width * 1.2;
-            this.worldY = (Math.random() - 0.5) * canvasElement.height * 1.0;
-            this.worldZ = SPAWN_Z;
-            this.speed = 12 + Math.random() * 8 + (score / 500); // 隨分數變快
-            this.color = Math.random() > 0.5 ? '#ff3333' : '#2ecc71';
-            this.hit = false;
-            this.baseSize = 120;
-            this.angle = (Math.random() - 0.5) * 0.5; // 輕微旋轉
-        }
+  let targetData = random(gameData);
+  currentTargetWord = targetData.word;
+  
+  let distractorData;
+  do { distractorData = random(gameData); } while(distractorData.word === targetData.word);
 
-        update() {
-            this.worldZ -= this.speed;
-        }
+  let hint = document.getElementById('listen-hint');
+  hint.classList.add('show');
+  hint.innerText = "🔊 Listen...";
 
-        draw(ctx) {
-            if (this.worldZ < DISAPPEAR_Z || this.hit) return;
-            const projected = project3D(this.worldX, this.worldY, this.worldZ);
-            const size = this.baseSize * projected.scale;
-            
-            ctx.save();
-            ctx.translate(projected.x, projected.y);
-            ctx.rotate(this.angle);
+  speak(targetData.word, null, SPEECH_RATE);
 
-            // 霓虹光暈效果
-            ctx.shadowColor = this.color;
-            ctx.shadowBlur = 30 * projected.scale;
-            ctx.fillStyle = this.color;
-            
-            // 畫方塊 (加上透明度讓它看起來像玻璃)
-            ctx.globalAlpha = 0.8;
-            ctx.beginPath();
-            ctx.roundRect(-size/2, -size/2, size, size, 15 * projected.scale);
-            ctx.fill();
-            
-            // 邊框
-            ctx.lineWidth = 4 * projected.scale;
-            ctx.strokeStyle = '#fff';
-            ctx.stroke();
+  setTimeout(() => {
+    hint.classList.remove('show');
+    spawnCards(targetData, distractorData);
+  }, 1000); 
+}
 
-            // 文字
-            ctx.globalAlpha = 1.0;
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'white';
-            ctx.font = `bold ${35 * projected.scale}px 'Fredoka One'`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(this.word, 0, 0);
+function spawnCards(target, distractor) {
+  let items = [target, distractor];
+  if (random() > 0.5) items.reverse();
 
-            ctx.restore();
+  let startLeft = { x: width * 0.15, y: height + 50 };
+  let startRight = { x: width * 0.85, y: height + 50 };
+  let targetLeft = { x: width * 0.4, y: height * 0.2 };
+  let targetRight = { x: width * 0.6, y: height * 0.2 };
 
-            this.currentProjected = projected;
-            this.currentSize = size;
-        }
-    }
+  launchCard(startLeft.x, startLeft.y, targetLeft.x, targetLeft.y, items[0], items[0].word === currentTargetWord);
+  launchCard(startRight.x, startRight.y, targetRight.x, targetRight.y, items[1], items[1].word === currentTargetWord);
+}
 
-    class FloatingText {
-        constructor(x, y, text) {
-            this.x = x;
-            this.y = y;
-            this.text = text;
-            this.life = 1.0;
-            this.vy = -3; // 向上飄
-        }
-        update() {
+function launchCard(startX, startY, destX, destY, data, isTarget) {
+    let gravity = 0.12; 
+    let heightDiff = startY - destY;
+    let vy = -Math.sqrt(2 * gravity * heightDiff); 
+    let timeToPeak = Math.abs(vy / gravity);
+    let vx = (destX - startX) / timeToPeak;
+
+    cards.push({
+        x: startX, y: startY,
+        vx: vx, vy: vy,
+        gravity: gravity,
+        size: 150,
+        angle: 0, rotSpeed: random(-0.01, 0.01), 
+        data: data, isTarget: isTarget,
+        draw: function() {
+            push();
+            translate(this.x, this.y); rotate(this.angle);
+            fill(255); 
+            stroke(isTarget ? "#c0392b" : "#2c3e50"); 
+            strokeWeight(5);
+            rect(0, 0, this.size, this.size * 1.3, 20);
+            textSize(90); noStroke(); text(this.data.icon, 0, -20);
+            fill(0); textSize(30); textStyle(BOLD); text(this.data.word, 0, 55);
+            pop();
+        },
+        update: function() {
+            this.x += this.vx;
             this.y += this.vy;
-            this.life -= 0.02;
+            this.vy += this.gravity;
+            this.angle += this.rotSpeed;
         }
-        draw(ctx) {
-            ctx.save();
-            ctx.globalAlpha = Math.max(0, this.life);
-            ctx.fillStyle = "#ffe600";
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 5;
-            ctx.font = "bold 40px 'Fredoka One'";
-            ctx.fillText(this.text, this.x, this.y);
-            ctx.restore();
-        }
+    });
+}
+
+function draw() {
+  setGradient(0, 0, width, height, color(11, 30, 16), color(5, 10, 5));
+  drawSnow();
+  drawChristmasBorder();
+
+  if(!isGameRunning) return;
+
+  // 1. 光劍更新 (滑鼠控制)
+  updateSaber(mouseX, mouseY);
+  drawSaberOptimized();
+
+  // 2. 卡片邏輯
+  for (let i = cards.length - 1; i >= 0; i--) {
+    let c = cards[i];
+    if (!c) continue; 
+    c.update();
+    c.draw();
+
+    if (dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 30) {
+        handleHit(c, i);
+        break; 
+    } 
+    else if (c.y > height + 200) {
+      cards.splice(i, 1);
+      if(cards.length === 0) setTimeout(startRound, 1000);
     }
+  }
 
-    // 光劍軌跡系統
-    class SaberTrail {
-        constructor(color) {
-            this.points = [];
-            this.color = color;
-            this.maxLength = 10; // 軌跡長度
-        }
-        addPoint(x, y) {
-            this.points.push({x, y, age: 0});
-            if (this.points.length > this.maxLength) this.points.shift();
-        }
-        draw(ctx) {
-            if (this.points.length < 2) return;
-            
-            ctx.beginPath();
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            // 畫光劍核心 (白)
-            ctx.moveTo(this.points[0].x, this.points[0].y);
-            for (let i = 1; i < this.points.length; i++) {
-                ctx.lineTo(this.points[i].x, this.points[i].y);
-            }
-            ctx.lineWidth = 10;
-            ctx.strokeStyle = 'white';
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = this.color;
-            ctx.stroke();
+  // 3. 粒子特效
+  drawParticles();
+  
+  // 4. 文字回饋
+  drawFeedback();
 
-            // 畫光劍外暈
-            ctx.beginPath();
-            ctx.moveTo(this.points[0].x, this.points[0].y);
-            for (let i = 1; i < this.points.length; i++) {
-                ctx.lineTo(this.points[i].x, this.points[i].y);
-            }
-            ctx.lineWidth = 20;
-            ctx.strokeStyle = this.color;
-            ctx.globalAlpha = 0.5;
-            ctx.stroke();
-            ctx.globalAlpha = 1.0;
-            ctx.shadowBlur = 0;
-        }
-    }
+  // 5. 分數
+  fill(255); textSize(36); textStyle(BOLD); noStroke();
+  textAlign(LEFT, TOP);
+  text("Score: " + score, 60, 60);
+  textAlign(CENTER, CENTER);
+}
 
-    // 雪花系統 (背景)
-    class Snowflake {
-        constructor() {
-            this.reset();
-        }
-        reset() {
-            this.x = Math.random() * bgCanvasElement.width;
-            this.y = Math.random() * -bgCanvasElement.height;
-            this.size = Math.random() * 3 + 1;
-            this.speed = Math.random() * 2 + 0.5;
-            this.opacity = Math.random() * 0.5 + 0.3;
-        }
-        update() {
-            this.y += this.speed;
-            if (this.y > bgCanvasElement.height) this.reset();
-        }
-        draw(ctx) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
+// --- 全新升級的粒子系統 ---
+function createExplosion(x, y, colorHex) {
+  // 1. 產生卡片顏色的碎屑 (Confetti)
+  for (let i = 0; i < 30; i++) {
+    particles.push(new Particle(x, y, colorHex, 'debris'));
+  }
+  // 2. 產生金色的魔法火花 (Sparkle)
+  for (let i = 0; i < 20; i++) {
+    particles.push(new Particle(x, y, '#ffd700', 'sparkle'));
+  }
+}
 
-    let blocks = [];
-    let particles = [];
-    let floatingTexts = [];
-    let snowflakes = [];
-    let saberTrails = [new SaberTrail('#00ffff'), new SaberTrail('#ff00ff')]; // 左右手不同色
-    let frameCount = 0;
-
-    // 初始化雪花
-    for(let i=0; i<100; i++) snowflakes.push(new Snowflake());
-
-    function startGame() {
-        initAudio();
-        startScreen.classList.add('hidden');
-        gameState = 'PLAYING';
-        score = 0;
-        scoreElement.innerText = score;
-        blocks = [];
-        particles = [];
-        floatingTexts = [];
-        gameLoop();
-    }
-
-    function createHitEffect(x, y, color) {
-        // 爆炸粒子
-        for(let i=0; i<20; i++) {
-            particles.push({
-                x: x, y: y,
-                vx: (Math.random()-0.5) * 25,
-                vy: (Math.random()-0.5) * 25,
-                life: 1.0,
-                color: color,
-                size: Math.random() * 8 + 2
-            });
-        }
-        // 漂浮分數
-        floatingTexts.push(new FloatingText(x, y - 50, "+100"));
-        playSound('hit');
-    }
-
-    function gameLoop() {
-        if (gameState !== 'PLAYING') return;
-
-        // 1. 清除與繪製背景
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        bgCtx.clearRect(0, 0, bgCanvasElement.width, bgCanvasElement.height);
+class Particle {
+    constructor(x, y, col, type) {
+        this.x = x;
+        this.y = y;
+        this.col = col;
+        this.type = type;
         
-        // 繪製雪花
-        snowflakes.forEach(s => { s.update(); s.draw(bgCtx); });
-
-        frameCount++;
-        if (frameCount % 50 === 0) { // 生成頻率
-            blocks.push(new WordBlock());
-        }
-
-        // 2. 手部處理
-        let saberTips = [];
-        if (handLandmarksMap) {
-            handLandmarksMap.forEach((landmarks, index) => {
-                const indexFingerTip = landmarks[8]; 
-                const tipX = indexFingerTip.x * canvasElement.width;
-                const tipY = indexFingerTip.y * canvasElement.height;
-
-                // 更新光劍軌跡
-                if (saberTrails[index]) {
-                    saberTrails[index].addPoint(tipX, tipY);
-                    saberTrails[index].draw(canvasCtx);
-                    // 根據移動速度播放音效 (簡單版：隨機觸發)
-                    if (Math.random() < 0.05) playSound('swoosh');
-                }
-                
-                saberTips.push({x: tipX, y: tipY});
-            });
-        } else {
-            // 沒手的時候清空軌跡
-            saberTrails.forEach(t => t.points = []);
-        }
-
-        // 3. 方塊邏輯
-        for (let i = blocks.length - 1; i >= 0; i--) {
-            let block = blocks[i];
-            block.update();
-            block.draw(canvasCtx);
-
-            // 碰撞檢測 (判定放寬 / 1.2)
-            if (!block.hit && block.worldZ < HIT_Z && block.worldZ > 0 && block.currentProjected) {
-                for (const tip of saberTips) {
-                    const dx = tip.x - block.currentProjected.x;
-                    const dy = tip.y - block.currentProjected.y;
-                    const distance = Math.sqrt(dx*dx + dy*dy);
-
-                    if (distance < block.currentSize / 1.2) { 
-                        block.hit = true;
-                        score += 100;
-                        scoreElement.innerText = score;
-                        createHitEffect(block.currentProjected.x, block.currentProjected.y, block.color);
-                        break;
-                    }
-                }
-            }
-            if (block.worldZ < DISAPPEAR_Z || block.hit) {
-                blocks.splice(i, 1);
-            }
-        }
-
-        // 4. 特效邏輯
-        for(let i = particles.length - 1; i >=0; i--) {
-            let p = particles[i];
-            p.x += p.vx; p.y += p.vy; p.life -= 0.04;
-            canvasCtx.fillStyle = p.color;
-            canvasCtx.globalAlpha = p.life;
-            canvasCtx.beginPath();
-            canvasCtx.arc(p.x, p.y, p.size, 0, Math.PI*2);
-            canvasCtx.fill();
-            canvasCtx.globalAlpha = 1.0;
-            if(p.life <= 0) particles.splice(i, 1);
-        }
-
-        for(let i = floatingTexts.length - 1; i >=0; i--) {
-            let ft = floatingTexts[i];
-            ft.update();
-            ft.draw(canvasCtx);
-            if(ft.life <= 0) floatingTexts.splice(i, 1);
-        }
-
-        requestAnimationFrame(gameLoop);
+        let angle = random(TWO_PI);
+        let speed = random(2, 12); // 爆炸速度更快
+        this.vx = cos(angle) * speed;
+        this.vy = sin(angle) * speed;
+        
+        this.life = 255;
+        this.gravity = 0.4; // 重力感
+        this.friction = 0.94; // 空氣阻力
+        
+        this.size = type === 'debris' ? random(8, 16) : random(3, 8);
+        this.rot = random(TWO_PI);
+        this.rotSpeed = random(-0.3, 0.3);
     }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+        
+        this.life -= this.type === 'debris' ? 5 : 8; // 碎屑消失慢，火花消失快
+        this.rot += this.rotSpeed;
+        this.size *= 0.96; // 慢慢縮小
+    }
+    
+    draw() {
+        push();
+        translate(this.x, this.y);
+        rotate(this.rot);
+        noStroke();
+        
+        // 設定顏色
+        let c = color(this.col);
+        c.setAlpha(this.life);
+        fill(c);
+
+        if (this.type === 'debris') {
+            // 碎屑是方形的
+            rect(0, 0, this.size, this.size);
+        } else {
+            // 火花是發光的
+            blendMode(ADD);
+            circle(0, 0, this.size);
+            blendMode(BLEND);
+        }
+        pop();
+    }
+}
+
+function drawParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    p.update();
+    p.draw();
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// --- 鼓勵語特效 ---
+function triggerFeedback(isCorrect) {
+    if (isCorrect) {
+        feedback.text = random(phrasesCorrect);
+    } else {
+        feedback.text = random(phrasesWrong);
+    }
+    feedback.life = 255;
+    feedback.y = height / 2;
+    feedback.scale = 0.5;
+}
+
+function drawFeedback() {
+    if (feedback.life > 0) {
+        push();
+        translate(width / 2, feedback.y);
+        scale(feedback.scale);
+        
+        let goldColor = color(255, 215, 0, feedback.life);
+        drawingContext.shadowBlur = 40; // 光暈更強
+        drawingContext.shadowColor = 'rgba(255, 215, 0, 0.8)';
+        
+        fill(goldColor);
+        stroke(255, feedback.life);
+        strokeWeight(3);
+        
+        textSize(90);
+        textStyle(BOLD);
+        text(feedback.text, 0, 0);
+        
+        feedback.life -= 4;
+        feedback.y -= 1.5; // 上升速度
+        if(feedback.scale < 1.2) feedback.scale += 0.05;
+        
+        drawingContext.shadowBlur = 0;
+        pop();
+    }
+}
+
+function handleHit(card, index) {
+  cards.splice(index, 1);
+  // 觸發大爆炸特效
+  createExplosion(card.x, card.y, card.data.color);
+
+  if (card.isTarget) {
+    score += 10;
+    triggerFeedback(true);
+    speak(feedback.text, null, SPEECH_RATE);
+    cards = []; 
+    setTimeout(startRound, 1200);
+  } else {
+    triggerFeedback(false);
+    speak(feedback.text, null, SPEECH_RATE);
+    cards = [];
+    setTimeout(startRound, 1200);
+  }
+}
+
+function drawChristmasBorder() {
+  push();
+  rectMode(CORNER); 
+  noStroke();
+  let borderW = 30; 
+  let stripeLen = 40; 
+  let redC = color('#c0392b');
+  let greenC = color('#27ae60');
+
+  for(let x = 0; x < width; x += stripeLen) {
+    fill((x / stripeLen) % 2 === 0 ? redC : greenC);
+    rect(x, 0, stripeLen, borderW);
+  }
+  for(let x = 0; x < width; x += stripeLen) {
+    fill((x / stripeLen) % 2 !== 0 ? redC : greenC); 
+    rect(x, height - borderW, stripeLen, borderW);
+  }
+  for(let y = borderW; y < height - borderW; y += stripeLen) {
+    fill((y / stripeLen) % 2 === 0 ? redC : greenC);
+    rect(0, y, borderW, stripeLen);
+  }
+  for(let y = borderW; y < height - borderW; y += stripeLen) {
+    fill((y / stripeLen) % 2 !== 0 ? redC : greenC); 
+    rect(width - borderW, y, borderW, stripeLen);
+  }
+
+  fill(redC); rect(0,0,borderW,borderW);
+  fill(greenC); rect(width-borderW,0,borderW,borderW);
+  fill(greenC); rect(0,height-borderW,borderW,borderW);
+  fill(redC); rect(width-borderW,height-borderW,borderW,borderW);
+  pop();
+}
+
+function updateSaber(x, y) {
+  saberTrail.push({x: x, y: y, life: 8});
+  for (let i = saberTrail.length - 1; i >= 0; i--) {
+    saberTrail[i].life--;
+    if (saberTrail[i].life <= 0) saberTrail.splice(i, 1);
+  }
+}
+
+function drawSaberOptimized() {
+  if (saberTrail.length < 2) return;
+  blendMode(ADD); 
+  noFill(); strokeCap(ROUND); strokeJoin(ROUND);
+
+  stroke(255, 0, 0, 100); strokeWeight(25);
+  beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
+
+  stroke(255, 50, 50, 200); strokeWeight(15);
+  beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
+
+  stroke(255, 255, 255, 255); strokeWeight(5);
+  beginShape(); for (let p of saberTrail) vertex(p.x, p.y); endShape();
+  blendMode(BLEND); 
+}
+
+function drawSnow() {
+  fill(255, 100); noStroke();
+  for(let s of snowFlakes) {
+    circle(s.x, s.y, s.size);
+    s.y += s.speed;
+    if(s.y > height) s.y = -10;
+  }
+}
+
+function setGradient(x, y, w, h, c1, c2) {
+  noFill();
+  for (let i = y; i <= y + h; i+=10) { 
+    let inter = map(i, y, y + h, 0, 1);
+    let c = lerpColor(c1, c2, inter);
+    stroke(c); strokeWeight(10);
+    line(x, i, x + w, i);
+  }
+}
+
+function speak(text, callback, rate = 1.0) {
+  synth.cancel();
+  let u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US'; 
+  u.rate = rate; 
+  if(callback) u.onend = callback;
+  synth.speak(u);
+}
 </script>
 </body>
 </html>
