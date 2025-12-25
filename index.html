@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聖誕光劍 (協會字體加大版)</title>
+<title>聖誕光劍 (切開特效版)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
 <style>
@@ -215,6 +215,7 @@ let correctCount = 0;
 const MAX_SCORE = 20; // 目標分數
 
 let cards = [];
+let slicedCards = []; // 新增：存放切開的卡片碎片
 let particles = [];
 let saberTrail = [];
 let snowFlakes = []; 
@@ -326,6 +327,26 @@ function spawnCards(target, distractor) {
   launchCard(R.rightLaneX, height + 50, R.rightLaneX, height * 0.2, items[1], items[1].word === currentTargetWord);
 }
 
+// --- 核心繪圖邏輯 (重構為共用函式) ---
+function drawCardVisual(size, data, isTarget) {
+    fill(255); 
+    stroke(isTarget ? "#c0392b" : "#2c3e50"); 
+    strokeWeight(3);
+    rect(0, 0, size, size * 1.3, 15);
+    
+    textSize(R.emojiSize); noStroke(); 
+    text(data.icon, 0, -size*0.15);
+    
+    // 字體大小動態調整
+    let finalFontSize = R.baseTextSize;
+    let wordLen = data.word.length;
+    if (wordLen > 6) finalFontSize = R.baseTextSize * 0.85;
+    if (wordLen > 8) finalFontSize = R.baseTextSize * 0.7;
+
+    fill(0); textSize(finalFontSize); textStyle(BOLD); 
+    text(data.word, 0, size*0.4);
+}
+
 function launchCard(startX, startY, destX, destY, data, isTarget) {
     let gravity = 0.06; 
     let heightDiff = startY - destY;
@@ -344,19 +365,8 @@ function launchCard(startX, startY, destX, destY, data, isTarget) {
         draw: function() {
             push();
             translate(this.x, this.y); rotate(this.angle);
-            fill(255); 
-            stroke(isTarget ? "#c0392b" : "#2c3e50"); 
-            strokeWeight(3);
-            rect(0, 0, this.size, this.size * 1.3, 15);
-            textSize(R.emojiSize); noStroke(); text(this.data.icon, 0, -this.size*0.15);
-            
-            // 字體大小動態調整
-            let finalFontSize = R.baseTextSize;
-            let wordLen = this.data.word.length;
-            if (wordLen > 6) finalFontSize = R.baseTextSize * 0.85;
-            if (wordLen > 8) finalFontSize = R.baseTextSize * 0.7;
-
-            fill(0); textSize(finalFontSize); textStyle(BOLD); text(this.data.word, 0, this.size*0.4);
+            // 呼叫共用繪圖函式
+            drawCardVisual(this.size, this.data, this.isTarget);
             pop();
         },
         update: function() {
@@ -374,6 +384,7 @@ function draw() {
   drawChristmasBorder();
 
   drawParticles(); 
+  updateAndDrawSlicedCards(); // 繪製切開的卡片
 
   if(!isGameRunning) return;
 
@@ -417,10 +428,87 @@ function draw() {
   drawFeedback();
 }
 
+// --- 切開特效邏輯 ---
+function createSliceEffect(card) {
+    // 產生左半邊碎片
+    slicedCards.push({
+        x: card.x, y: card.y,
+        vx: card.vx - random(2, 5), // 向左飛
+        vy: card.vy - random(2, 4),
+        angle: card.angle, 
+        vAngle: -random(0.1, 0.3), // 旋轉
+        gravity: 0.3,
+        size: card.size,
+        data: card.data, isTarget: card.isTarget,
+        side: 'left', // 標記為左邊
+        life: 255
+    });
+
+    // 產生右半邊碎片
+    slicedCards.push({
+        x: card.x, y: card.y,
+        vx: card.vx + random(2, 5), // 向右飛
+        vy: card.vy - random(2, 4),
+        angle: card.angle, 
+        vAngle: random(0.1, 0.3), // 旋轉
+        gravity: 0.3,
+        size: card.size,
+        data: card.data, isTarget: card.isTarget,
+        side: 'right', // 標記為右邊
+        life: 255
+    });
+}
+
+function updateAndDrawSlicedCards() {
+    for (let i = slicedCards.length - 1; i >= 0; i--) {
+        let p = slicedCards[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.angle += p.vAngle;
+        p.life -= 8; // 漸漸消失
+
+        if (p.life <= 0) {
+            slicedCards.splice(i, 1);
+            continue;
+        }
+
+        push();
+        translate(p.x, p.y);
+        rotate(p.angle);
+        
+        // 設定透明度
+        let c = color(255);
+        c.setAlpha(p.life);
+        
+        // 使用剪裁 (Clipping) 技術
+        drawingContext.save();
+        drawingContext.beginPath();
+        
+        let w = p.size;
+        let h = p.size * 1.3;
+        
+        // 定義剪裁區域 (左半或右半)
+        if (p.side === 'left') {
+            drawingContext.rect(-w/2, -h/2, w/2, h); 
+        } else {
+            drawingContext.rect(0, -h/2, w/2, h);
+        }
+        drawingContext.clip();
+
+        // 繪製完整的卡片內容 (因為被 Clip 了，所以只會顯示一半)
+        drawCardVisual(p.size, p.data, p.isTarget);
+        
+        drawingContext.restore();
+        pop();
+    }
+}
+
 // --- 勝利處理函式 ---
 function triggerVictory() {
     isGameRunning = false;
     cards = []; 
+    slicedCards = []; // 清空碎片
     document.getElementById('progress-container').style.display = 'none';
     
     const panel = document.getElementById('victory-panel');
@@ -434,7 +522,13 @@ function triggerVictory() {
 }
 
 function handleHit(card, index) {
+  // 1. 產生切開特效
+  createSliceEffect(card);
+  
+  // 2. 移除原卡片
   cards.splice(index, 1);
+  
+  // 3. 爆炸特效
   createExplosion(card.x, card.y, card.data.color);
 
   if (card.isTarget) {
