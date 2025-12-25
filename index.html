@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聖誕光劍 (防誤觸完美版)</title>
+<title>聖誕光劍 (字體優化版)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
 
 <style>
@@ -135,7 +135,7 @@ const SPEECH_RATE = 0.85;
 let R = {
     cardSize: 0,
     emojiSize: 0,
-    textSize: 0,
+    baseTextSize: 0, // 基礎字體大小
     borderW: 0,
     feedbackSize: 0,
     scoreSize: 0,
@@ -176,7 +176,7 @@ function calculateResponsiveSizes() {
     }
 
     R.emojiSize = R.cardSize * 0.6;
-    R.textSize = R.cardSize * 0.22;
+    R.baseTextSize = R.cardSize * 0.22; // 設定一個基礎字體大小
     
     R.borderW = minDim * 0.03;
     R.feedbackSize = minDim * 0.15;
@@ -219,7 +219,6 @@ function spawnCards(target, distractor) {
   let items = [target, distractor];
   if (random() > 0.5) items.reverse();
 
-  // 垂直發射，分左右跑道
   launchCard(R.leftLaneX, height + 50, R.leftLaneX, height * 0.2, items[0], items[0].word === currentTargetWord);
   launchCard(R.rightLaneX, height + 50, R.rightLaneX, height * 0.2, items[1], items[1].word === currentTargetWord);
 }
@@ -247,7 +246,21 @@ function launchCard(startX, startY, destX, destY, data, isTarget) {
             strokeWeight(3);
             rect(0, 0, this.size, this.size * 1.3, 15);
             textSize(R.emojiSize); noStroke(); text(this.data.icon, 0, -this.size*0.15);
-            fill(0); textSize(R.textSize); textStyle(BOLD); text(this.data.word, 0, this.size*0.4);
+            
+            // *** 修正重點：字體大小動態調整 ***
+            let finalFontSize = R.baseTextSize;
+            let wordLen = this.data.word.length;
+            
+            // 如果單字大於 6 個字母 (如 Reindeer)，縮小 15%
+            if (wordLen > 6) {
+                finalFontSize = R.baseTextSize * 0.85;
+            }
+            // 如果單字大於 8 個字母 (如 Snowflake)，縮小 30%
+            if (wordLen > 8) {
+                finalFontSize = R.baseTextSize * 0.7;
+            }
+
+            fill(0); textSize(finalFontSize); textStyle(BOLD); text(this.data.word, 0, this.size*0.4);
             pop();
         },
         update: function() {
@@ -266,39 +279,25 @@ function draw() {
 
   if(!isGameRunning) return;
 
-  // *** 1. 偵測光劍是否有效 (Active Saber Check) ***
+  // 1. 光劍狀態
   let isSaberActive = false;
-  
-  // 檢測是否為手機觸控
   if (touches.length > 0) {
       isSaberActive = true;
-      // 手機上：使用第一個觸控點
       updateSaber(touches[0].x, touches[0].y);
   } else {
-      // 電腦上：永遠有效
-      // 但我們加一個簡單的判斷：如果是觸控裝置但沒摸螢幕，就無效
-      // p5.js 中 mouseX 在手機上會殘留，所以我們依賴 touches 陣列長度來過濾手機的誤觸
-      
-      // 這裡有一個簡單的 Hack: 
-      // 如果 touches 為空，但 winMouseX 有值，我們假設這是電腦滑鼠
-      // 但為了保險，我們只在沒有 touches 時才畫鼠標光劍
       updateSaber(mouseX, mouseY);
       isSaberActive = true; 
   }
   
-  // *** 手機版特化：如果沒觸摸，清空軌跡，避免殘留 ***
   if (touches.length === 0 && 'ontouchstart' in window) {
       isSaberActive = false;
-      saberTrail = []; // 清空光劍，避免隱形殺手
+      saberTrail = []; 
   }
 
-  // 計算揮動速度 (防龜兵)
+  // 速度偵測
   let saberSpeed = dist(mouseX, mouseY, pmouseX, pmouseY);
-  // 在手機上，因為 mouseX 是映射 touch，所以這也能運作。
-  // 如果速度太慢（停在原地），就不算切擊
   let isSlashing = saberSpeed > 5; 
 
-  // 繪製光劍
   drawSaberOptimized();
 
   for (let i = cards.length - 1; i >= 0; i--) {
@@ -307,10 +306,6 @@ function draw() {
     c.update();
     c.draw();
 
-    // 碰撞偵測條件升級：
-    // 1. 光劍必須「存在」(有按著)
-    // 2. 光劍必須「有在動」(防龜兵，速度 > 5)
-    // 3. 距離夠近
     if (isSaberActive && isSlashing && dist(mouseX, mouseY, c.x, c.y) < c.size/2 + 20) {
         handleHit(c, i);
         break; 
