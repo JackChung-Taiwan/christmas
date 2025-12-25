@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>🎄 Christmas Word Saber - 體感切單字</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -12,29 +14,34 @@
     <style>
         body {
             margin: 0;
-            background-color: #000;
+            background: radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d); /* 聖誕夜漸層背景 */
+            background-color: #0d0d2b;
             overflow: hidden;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Fredoka One', cursive; /* 使用圓潤字體 */
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
         }
 
-        /* 隱藏原始 video 元素，我們只需要它的資料 */
         .input_video { display: none; }
 
-        /* 遊戲畫布，疊加在最上方 */
         .output_canvas {
             position: absolute;
             width: 100%;
             height: 100%;
             z-index: 2;
-            /* 鏡像翻轉畫布，讓操作更直覺 */
             transform: scaleX(-1);
         }
 
-        /* UI 層，不翻轉 */
+        /* 增加一個背景層放雪花，不翻轉 */
+        #bg-canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
         #ui-layer {
             position: absolute;
             width: 100%;
@@ -45,100 +52,160 @@
             flex-direction: column;
             align-items: center;
             color: white;
-            text-shadow: 0 0 10px #ff0000, 0 0 20px #00ff00;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
 
         #score-board {
-            font-size: 32px;
+            font-size: 48px;
             margin-top: 20px;
-            font-weight: bold;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 30px;
+            border-radius: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(5px);
         }
+
+        #score { color: #ffe600; }
 
         #loading, #start-screen {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.8);
-            padding: 40px;
-            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 50px;
+            border-radius: 30px;
             text-align: center;
-            border: 2px solid #ff4444;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
             pointer-events: auto;
+            max-width: 80%;
         }
 
         #loading { z-index: 10; }
         
+        h1 { margin: 0 0 20px 0; color: #fff; font-size: 3rem; }
+        p { font-size: 1.2rem; color: #ddd; }
+        
         button {
-            padding: 15px 30px;
-            font-size: 24px;
-            background: #ff4444;
+            padding: 15px 40px;
+            font-size: 28px;
+            font-family: 'Fredoka One', cursive;
+            background: linear-gradient(to bottom, #ff4444, #cc0000);
             color: white;
             border: none;
             border-radius: 50px;
             cursor: pointer;
-            margin-top: 20px;
+            margin-top: 30px;
+            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
         }
-        button:hover { background: #ff2222; }
+        button:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(255, 0, 0, 0.6); }
+        button:active { transform: scale(0.95); }
         .hidden { display: none !important; }
 
     </style>
 </head>
 <body>
     <video class="input_video"></video>
+    <canvas id="bg-canvas"></canvas>
     <canvas class="output_canvas"></canvas>
 
     <div id="ui-layer">
-        <div id="score-board">Score: <span id="score">0</span></div>
+        <div id="score-board">SCORE: <span id="score">0</span></div>
         
         <div id="loading">
-            <h1>📷 啟動攝影機與 AI 模型中...</h1>
-            <p>請允許攝影機權限，並稍候片刻。</p>
-            <p>(初次載入可能需要 10-20 秒)</p>
+            <h1>📷 攝影機啟動中...</h1>
+            <p>請允許權限，準備好你的雙手！</p>
         </div>
 
         <div id="start-screen" class="hidden">
-            <h1>🎄 Christmas Word Saber</h1>
-            <p>揮動你的雙手作為光劍!</p>
-            <p>切擊飛來的聖誕單字方塊!</p>
-            <button onclick="startGame()">開始遊戲</button>
+            <h1>🎄 Christmas Saber</h1>
+            <p>揮動你的食指變成光劍！</p>
+            <p>看到方塊飛過來就切下去！</p>
+            <button onclick="startGame()">START GAME</button>
         </div>
     </div>
 
 <script>
     const videoElement = document.getElementsByClassName('input_video')[0];
     const canvasElement = document.getElementsByClassName('output_canvas')[0];
+    const bgCanvasElement = document.getElementById('bg-canvas');
     const canvasCtx = canvasElement.getContext('2d');
+    const bgCtx = bgCanvasElement.getContext('2d');
     const scoreElement = document.getElementById('score');
     const loadingScreen = document.getElementById('loading');
     const startScreen = document.getElementById('start-screen');
 
-    let gameState = 'LOADING'; // LOADING, READY, PLAYING
+    let gameState = 'LOADING'; 
     let score = 0;
-    let handLandmarksMap = []; // 儲存偵測到的手部數據
+    let handLandmarksMap = [];
+    
+    // 音效環境
+    let audioCtx;
 
     // 聖誕單字庫
     const christmasWords = [
         "Santa", "Gift", "Tree", "Star", "Snow", 
-        "Bells", "Elf", "Candy", "Reindeer", "Sleigh",
-        "Merry", "Xmas", "Rudolph", "Jingle", "Noel"
+        "Bell", "Elf", "Candy", "Deer", "Sleigh",
+        "Merry", "Xmas", "Joy", "Love", "Noel", "HoHoHo"
     ];
 
     // 調整畫布大小
     function resizeCanvas() {
         canvasElement.width = window.innerWidth;
         canvasElement.height = window.innerHeight;
+        bgCanvasElement.width = window.innerWidth;
+        bgCanvasElement.height = window.innerHeight;
     }
     window.onresize = resizeCanvas;
     resizeCanvas();
 
     // ==========================================
-    // MediaPipe Hands 設定 (AI 手部追蹤核心)
+    // 音效生成器 (不需外部檔案)
+    // ==========================================
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    function playSound(type) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+
+        if (type === 'hit') {
+            // 清脆的叮聲
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        } else if (type === 'swoosh') {
+            // 揮舞的低頻噪音 (模擬)
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(100, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.1);
+            gainNode.gain.setValueAtTime(0.05, now);
+            gainNode.gain.linearRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+    }
+
+    // ==========================================
+    // MediaPipe Hands
     // ==========================================
     function onResults(results) {
-        // 將偵測結果存起來給遊戲迴圈使用
         handLandmarksMap = results.multiHandLandmarks;
-
         if (gameState === 'LOADING' && handLandmarksMap.length > 0) {
             gameState = 'READY';
             loadingScreen.classList.add('hidden');
@@ -146,39 +213,30 @@
         }
     }
 
-    const hands = new Hands({locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-    }});
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({
-        maxNumHands: 2, // 最多偵測兩隻手
-        modelComplexity: 1, // 1為中等精度，適合電腦。0為低精度適合手機
+        maxNumHands: 2,
+        modelComplexity: 1,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
     hands.onResults(onResults);
 
-    // 使用 CameraUtils 自動處理攝影機串流
     const camera = new Camera(videoElement, {
-        onFrame: async () => {
-            await hands.send({image: videoElement});
-        },
+        onFrame: async () => { await hands.send({image: videoElement}); },
         width: 640,
         height: 480
     });
     camera.start();
 
-
     // ==========================================
-    // 遊戲引擎與 3D 透視模擬
+    // 遊戲物件類別
     // ==========================================
-    
-    // 模擬 3D 的參數
-    const FOCAL_LENGTH = 400; // 焦距，影響透視感強烈程度
-    const SPAWN_Z = 1500; // 方塊生成的遠處 Z 座標
-    const HIT_Z = 100; // 方塊可以被切擊的 Z 座標區域
-    const DISAPPEAR_Z = -200; // 方塊消失在身後的 Z 座標
+    const FOCAL_LENGTH = 400;
+    const SPAWN_Z = 1500;
+    const HIT_Z = 150; 
+    const DISAPPEAR_Z = -200;
 
-    // 將 3D 世界座標投影到 2D 畫布的函數
     function project3D(x, y, z) {
         const scale = FOCAL_LENGTH / (FOCAL_LENGTH + z);
         const canvasX = (canvasElement.width / 2) + (x * scale);
@@ -189,14 +247,14 @@
     class WordBlock {
         constructor() {
             this.word = christmasWords[Math.floor(Math.random() * christmasWords.length)];
-            // 隨機生成在視野中心的周圍
-            this.worldX = (Math.random() - 0.5) * canvasElement.width * 1.5;
-            this.worldY = (Math.random() - 0.5) * canvasElement.height * 1.5;
+            this.worldX = (Math.random() - 0.5) * canvasElement.width * 1.2;
+            this.worldY = (Math.random() - 0.5) * canvasElement.height * 1.0;
             this.worldZ = SPAWN_Z;
-            this.speed = 15 + Math.random() * 10; // 飛行速度
-            this.color = Math.random() > 0.5 ? '#ff3333' : '#33ff33'; // 紅色或綠色方塊
+            this.speed = 12 + Math.random() * 8 + (score / 500); // 隨分數變快
+            this.color = Math.random() > 0.5 ? '#ff3333' : '#2ecc71';
             this.hit = false;
-            this.baseSize = 100; // 方塊基準大小
+            this.baseSize = 120;
+            this.angle = (Math.random() - 0.5) * 0.5; // 輕微旋轉
         }
 
         update() {
@@ -205,165 +263,263 @@
 
         draw(ctx) {
             if (this.worldZ < DISAPPEAR_Z || this.hit) return;
-
             const projected = project3D(this.worldX, this.worldY, this.worldZ);
             const size = this.baseSize * projected.scale;
             
             ctx.save();
             ctx.translate(projected.x, projected.y);
-            
-            // 繪製發光方塊背景
-            ctx.fillStyle = this.color;
-            ctx.shadowColor = this.color;
-            ctx.shadowBlur = 20 * projected.scale;
-            // 繪製一個圓角矩形作為方塊
-            ctx.beginPath();
-            ctx.roundRect(-size/2, -size/2, size, size, 10 * projected.scale);
-            ctx.fill();
+            ctx.rotate(this.angle);
 
-            // 繪製文字
-            ctx.fillStyle = 'white';
+            // 霓虹光暈效果
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 30 * projected.scale;
+            ctx.fillStyle = this.color;
+            
+            // 畫方塊 (加上透明度讓它看起來像玻璃)
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.roundRect(-size/2, -size/2, size, size, 15 * projected.scale);
+            ctx.fill();
+            
+            // 邊框
+            ctx.lineWidth = 4 * projected.scale;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+
+            // 文字
+            ctx.globalAlpha = 1.0;
             ctx.shadowBlur = 0;
-            ctx.font = `bold ${30 * projected.scale}px Arial`;
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${35 * projected.scale}px 'Fredoka One'`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.word, 0, 0);
 
             ctx.restore();
 
-            this.currentProjected = projected; // 儲存當前投影位置供碰撞檢測
+            this.currentProjected = projected;
             this.currentSize = size;
         }
     }
 
+    class FloatingText {
+        constructor(x, y, text) {
+            this.x = x;
+            this.y = y;
+            this.text = text;
+            this.life = 1.0;
+            this.vy = -3; // 向上飄
+        }
+        update() {
+            this.y += this.vy;
+            this.life -= 0.02;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillStyle = "#ffe600";
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 5;
+            ctx.font = "bold 40px 'Fredoka One'";
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    // 光劍軌跡系統
+    class SaberTrail {
+        constructor(color) {
+            this.points = [];
+            this.color = color;
+            this.maxLength = 10; // 軌跡長度
+        }
+        addPoint(x, y) {
+            this.points.push({x, y, age: 0});
+            if (this.points.length > this.maxLength) this.points.shift();
+        }
+        draw(ctx) {
+            if (this.points.length < 2) return;
+            
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // 畫光劍核心 (白)
+            ctx.moveTo(this.points[0].x, this.points[0].y);
+            for (let i = 1; i < this.points.length; i++) {
+                ctx.lineTo(this.points[i].x, this.points[i].y);
+            }
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = 'white';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+            ctx.stroke();
+
+            // 畫光劍外暈
+            ctx.beginPath();
+            ctx.moveTo(this.points[0].x, this.points[0].y);
+            for (let i = 1; i < this.points.length; i++) {
+                ctx.lineTo(this.points[i].x, this.points[i].y);
+            }
+            ctx.lineWidth = 20;
+            ctx.strokeStyle = this.color;
+            ctx.globalAlpha = 0.5;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // 雪花系統 (背景)
+    class Snowflake {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.x = Math.random() * bgCanvasElement.width;
+            this.y = Math.random() * -bgCanvasElement.height;
+            this.size = Math.random() * 3 + 1;
+            this.speed = Math.random() * 2 + 0.5;
+            this.opacity = Math.random() * 0.5 + 0.3;
+        }
+        update() {
+            this.y += this.speed;
+            if (this.y > bgCanvasElement.height) this.reset();
+        }
+        draw(ctx) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     let blocks = [];
-    let particles = []; // 切擊特效粒子
+    let particles = [];
+    let floatingTexts = [];
+    let snowflakes = [];
+    let saberTrails = [new SaberTrail('#00ffff'), new SaberTrail('#ff00ff')]; // 左右手不同色
     let frameCount = 0;
 
+    // 初始化雪花
+    for(let i=0; i<100; i++) snowflakes.push(new Snowflake());
+
     function startGame() {
+        initAudio();
         startScreen.classList.add('hidden');
         gameState = 'PLAYING';
         score = 0;
         scoreElement.innerText = score;
         blocks = [];
         particles = [];
+        floatingTexts = [];
         gameLoop();
     }
 
-    // 產生切擊粒子特效
     function createHitEffect(x, y, color) {
-        for(let i=0; i<15; i++) {
+        // 爆炸粒子
+        for(let i=0; i<20; i++) {
             particles.push({
                 x: x, y: y,
-                vx: (Math.random()-0.5) * 20,
-                vy: (Math.random()-0.5) * 20,
+                vx: (Math.random()-0.5) * 25,
+                vy: (Math.random()-0.5) * 25,
                 life: 1.0,
-                color: color
+                color: color,
+                size: Math.random() * 8 + 2
             });
         }
+        // 漂浮分數
+        floatingTexts.push(new FloatingText(x, y - 50, "+100"));
+        playSound('hit');
     }
 
-    // 主遊戲迴圈
     function gameLoop() {
         if (gameState !== 'PLAYING') return;
 
-        // 1. 清除畫布 (使用半透明黑色製造殘影軌跡感)
-        canvasCtx.fillStyle = 'rgba(0,0,0,0.3)';
-        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        // 1. 清除與繪製背景
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        bgCtx.clearRect(0, 0, bgCanvasElement.width, bgCanvasElement.height);
+        
+        // 繪製雪花
+        snowflakes.forEach(s => { s.update(); s.draw(bgCtx); });
 
         frameCount++;
-
-        // 2. 定期生成新方塊
-        if (frameCount % 60 === 0) { // 每 60 幀生成一個
+        if (frameCount % 50 === 0) { // 生成頻率
             blocks.push(new WordBlock());
         }
 
-        // 3. 處理手部追蹤顯示與「光劍」邏輯
-        let saberTips = []; // 儲存食指指尖位置
+        // 2. 手部處理
+        let saberTips = [];
         if (handLandmarksMap) {
-            for (const landmarks of handLandmarksMap) {
-                // 繪製手部骨架
-                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00ff00', lineWidth: 2});
-                drawLandmarks(canvasCtx, landmarks, {color: '#ff0000', lineWidth: 1, radius: 3});
-
-                // 獲取食指指尖 (索引 8) 的座標
-                // MediaPipe 返回的是 0.0-1.0 的比例座標，需要轉換成畫布像素座標
+            handLandmarksMap.forEach((landmarks, index) => {
                 const indexFingerTip = landmarks[8]; 
                 const tipX = indexFingerTip.x * canvasElement.width;
                 const tipY = indexFingerTip.y * canvasElement.height;
 
+                // 更新光劍軌跡
+                if (saberTrails[index]) {
+                    saberTrails[index].addPoint(tipX, tipY);
+                    saberTrails[index].draw(canvasCtx);
+                    // 根據移動速度播放音效 (簡單版：隨機觸發)
+                    if (Math.random() < 0.05) playSound('swoosh');
+                }
+                
                 saberTips.push({x: tipX, y: tipY});
-
-                // 繪製光劍劍尖光暈
-                canvasCtx.beginPath();
-                canvasCtx.arc(tipX, tipY, 20, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = "rgba(50, 200, 255, 0.7)";
-                canvasCtx.shadowColor = "#32c8ff";
-                canvasCtx.shadowBlur = 30;
-                canvasCtx.fill();
-                canvasCtx.shadowBlur = 0;
-            }
+            });
+        } else {
+            // 沒手的時候清空軌跡
+            saberTrails.forEach(t => t.points = []);
         }
 
-        // 4. 更新與繪製方塊，並進行碰撞檢測
+        // 3. 方塊邏輯
         for (let i = blocks.length - 1; i >= 0; i--) {
             let block = blocks[i];
             block.update();
             block.draw(canvasCtx);
 
-            // 碰撞檢測：只在方塊靠近螢幕時檢測
+            // 碰撞檢測 (判定放寬 / 1.2)
             if (!block.hit && block.worldZ < HIT_Z && block.worldZ > 0 && block.currentProjected) {
                 for (const tip of saberTips) {
-                    // 計算指尖到方塊中心的距離
                     const dx = tip.x - block.currentProjected.x;
                     const dy = tip.y - block.currentProjected.y;
                     const distance = Math.sqrt(dx*dx + dy*dy);
 
-                    // 如果距離小於方塊大小的一半，視為切中
-                    if (distance < block.currentSize / 1.5) {
+                    if (distance < block.currentSize / 1.2) { 
                         block.hit = true;
                         score += 100;
                         scoreElement.innerText = score;
-                        // 觸發特效
                         createHitEffect(block.currentProjected.x, block.currentProjected.y, block.color);
-                        // 這裡可以加入音效
-                        break; // 一個方塊只能被切一次
+                        break;
                     }
                 }
             }
-
-            // 移除過期或被切掉的方塊
             if (block.worldZ < DISAPPEAR_Z || block.hit) {
                 blocks.splice(i, 1);
             }
         }
 
-        // 5. 更新與繪製粒子特效
+        // 4. 特效邏輯
         for(let i = particles.length - 1; i >=0; i--) {
             let p = particles[i];
-            p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+            p.x += p.vx; p.y += p.vy; p.life -= 0.04;
             canvasCtx.fillStyle = p.color;
             canvasCtx.globalAlpha = p.life;
             canvasCtx.beginPath();
-            canvasCtx.arc(p.x, p.y, 5, 0, Math.PI*2);
+            canvasCtx.arc(p.x, p.y, p.size, 0, Math.PI*2);
             canvasCtx.fill();
             canvasCtx.globalAlpha = 1.0;
             if(p.life <= 0) particles.splice(i, 1);
         }
 
-        // 繪製中心點參考線 (可選)
-        /*
-        canvasCtx.strokeStyle = 'rgba(255,255,255,0.1)';
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(canvasElement.width/2, 0); canvasCtx.lineTo(canvasElement.width/2, canvasElement.height);
-        canvasCtx.moveTo(0, canvasElement.height/2); canvasCtx.lineTo(canvasElement.width, canvasElement.height/2);
-        canvasCtx.stroke();
-        */
+        for(let i = floatingTexts.length - 1; i >=0; i--) {
+            let ft = floatingTexts[i];
+            ft.update();
+            ft.draw(canvasCtx);
+            if(ft.life <= 0) floatingTexts.splice(i, 1);
+        }
 
         requestAnimationFrame(gameLoop);
     }
-
-    // 由於 MediaPipe 需要攝影機輸入才能開始，遊戲循環會在點擊開始按鈕後觸發
 </script>
 </body>
 </html>
